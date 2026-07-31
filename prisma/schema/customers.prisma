@@ -1,0 +1,142 @@
+// ---------------------------------------------------------------------------
+// Customers — the B2B-shaped core.
+//
+// NBC's real customers are factories, hospitals, hotels, offices and malls:
+// one Customer has many Sites, each Site has many Assets (AC units). Modelling
+// "customer = one address = one job" would fail on their core accounts.
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id                 String          @id @default(cuid())
+  code               String          @unique // CUS-00001
+  type               CustomerType    @default(CORPORATE)
+  legalName          String // ชื่อตามหนังสือรับรอง
+  displayName        String
+  taxId              String? // เลขประจำตัวผู้เสียภาษี
+  segment            CustomerSegment @default(OTHER)
+  defaultPricingTier PricingTier     @default(STANDARD)
+  billingAddress     String?
+  phone              String?
+  email              String?
+  notes              String?
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  sites      CustomerSite[]
+  contacts   CustomerContact[]
+  contracts  Contract[]
+  jobs       Job[]
+  quotations Quotation[]
+
+  @@index([segment])
+  @@index([isActive])
+  @@map("customers")
+}
+
+model CustomerSite {
+  id          String   @id @default(cuid())
+  customerId  String
+  code        String // SITE-001, unique within the customer
+  name        String
+  address     String
+  subDistrict String?
+  district    String?
+  province    String?
+  postcode    String?
+  lat         Float?
+  lng         Float?
+  zoneId      String?
+  accessNotes String? // ข้อมูลการเข้าพื้นที่ เช่น ต้องขออนุญาต รปภ. ล่วงหน้า
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  zone          Zone?             @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  assets        Asset[]
+  jobs          Job[]
+  contacts      CustomerContact[]
+  contractSites ContractSite[]
+
+  @@unique([customerId, code])
+  @@index([zoneId])
+  @@index([customerId])
+  @@map("customer_sites")
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  customerId String
+  siteId     String?
+  userId     String?  @unique // set once the contact has a portal login
+  name       String
+  phone      String?
+  email      String?
+  position   String?
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer   Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  site       CustomerSite?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  user       User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  identities CustomerIdentity[]
+
+  @@index([customerId])
+  @@index([phone])
+  @@map("customer_contacts")
+}
+
+/// External login identity for a customer contact.
+/// @client-confirm G4 — LINE Login is the recommended default (they already run
+/// the @nbcservice OA); PHONE_OTP is the fallback. Adding a provider is a row.
+model CustomerIdentity {
+  id         String           @id @default(cuid())
+  contactId  String
+  provider   IdentityProvider
+  externalId String
+  createdAt  DateTime         @default(now())
+
+  contact CustomerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@index([contactId])
+  @@map("customer_identities")
+}
+
+/// The AC unit registry. This is what turns the product from a booking form
+/// into asset management — it lets a technician see "this same FCU failed twice
+/// in 8 months" and it drives PM auto-scheduling from pmFrequencyPerYear.
+///
+/// @client-confirm E5 — can be populated progressively: created implicitly
+/// the first time a technician services a unit, so no big-bang data entry.
+model Asset {
+  id                 String    @id @default(cuid())
+  siteId             String
+  assetTag           String // NBC tag or the customer's own tag
+  acType             AcType
+  brand              String?
+  model              String?
+  serialNo           String?
+  btu                Int?
+  refrigerant        String? // R32 / R410A / R22
+  installedAt        DateTime?
+  locationInBuilding String? // "อาคาร A ชั้น 3 ห้องประชุมใหญ่"
+  /// 2 / 3 / 4 — from the usage-profile tiers published on nbcgroup.co.th
+  pmFrequencyPerYear Int       @default(2)
+  lastPmAt           DateTime?
+  nextPmDueAt        DateTime?
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  site      CustomerSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  jobAssets JobAsset[]
+
+  @@unique([siteId, assetTag])
+  @@index([siteId])
+  @@index([nextPmDueAt])
+  @@index([acType])
+  @@map("assets")
+}

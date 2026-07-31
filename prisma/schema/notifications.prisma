@@ -1,0 +1,41 @@
+// ---------------------------------------------------------------------------
+// Notifications — channel-agnostic. The adapter is chosen by NOTIFY_DRIVER, so
+// LINE credentials never block development.
+// @client-confirm G3 — LINE Messaging API access for @nbcservice.
+// ---------------------------------------------------------------------------
+
+model NotificationTemplate {
+  id        String              @id @default(cuid())
+  code      String              @unique // JOB_CONFIRMED, TECH_EN_ROUTE, WORK_ORDER_READY
+  channel   NotificationChannel @default(LINE)
+  subjectTh String?
+  bodyTh    String
+  subjectEn String?
+  bodyEn    String?
+  isActive  Boolean             @default(true)
+  updatedAt DateTime            @updatedAt
+
+  logs NotificationLog[]
+
+  @@map("notification_templates")
+}
+
+model NotificationLog {
+  id           String              @id @default(cuid())
+  templateCode String?
+  channel      NotificationChannel
+  recipient    String // LINE userId, email address or phone number
+  payload      Json?
+  status       NotificationStatus  @default(QUEUED)
+  error        String?
+  jobId        String?
+  sentAt       DateTime?
+  createdAt    DateTime            @default(now())
+
+  template NotificationTemplate? @relation(fields: [templateCode], references: [code], onDelete: SetNull)
+  job      Job?                  @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([jobId])
+  @@map("notification_logs")
+}

@@ -1,0 +1,128 @@
+// ---------------------------------------------------------------------------
+// Dispatch — technicians, crews, shifts, assignment (requirement #4).
+//
+// Crews are dispatched, not individuals: cleaning is typically a 2-person job
+// and the lead technician owns work-order submission.
+// ---------------------------------------------------------------------------
+
+model Technician {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  employeeCode String    @unique
+  nickname     String?
+  phone        String?
+  zoneId       String?
+  level        Int       @default(1) // 1 = ช่าง, 2 = ช่างอาวุโส, 3 = หัวหน้าช่าง
+  hiredAt      DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone        Zone?             @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  skills      TechnicianSkill[]
+  crewMembers CrewMember[]
+  shifts      TechnicianShift[]
+  leadOfCrews Crew[]            @relation("CrewLead")
+
+  @@index([zoneId, isActive])
+  @@map("technicians")
+}
+
+/// @client-confirm F3 — e.g. Chiller / VRF work restricted to certified crews.
+/// The dispatch service gates assignment on this.
+model Skill {
+  id     String  @id @default(cuid())
+  code   String  @unique // CHILLER, VRF, AHU, ELECTRICAL, HIGH_WORK
+  nameTh String
+  nameEn String?
+
+  technicians TechnicianSkill[]
+
+  @@map("skills")
+}
+
+model TechnicianSkill {
+  technicianId String
+  skillId      String
+  certifiedAt  DateTime?
+  expiresAt    DateTime?
+
+  technician Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([technicianId, skillId])
+  @@map("technician_skills")
+}
+
+model Crew {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  zoneId           String?
+  leadTechnicianId String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  zone        Zone?           @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  lead        Technician?     @relation("CrewLead", fields: [leadTechnicianId], references: [id], onDelete: SetNull)
+  members     CrewMember[]
+  assignments JobAssignment[]
+
+  @@index([zoneId, isActive])
+  @@map("crews")
+}
+
+model CrewMember {
+  id           String    @id @default(cuid())
+  crewId       String
+  technicianId String
+  validFrom    DateTime  @default(now())
+  validTo      DateTime?
+
+  crew       Crew       @relation(fields: [crewId], references: [id], onDelete: Cascade)
+  technician Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@index([crewId])
+  @@index([technicianId])
+  @@map("crew_members")
+}
+
+/// Available minutes per technician per day — the denominator for both quota
+/// capacity planning and the productivity KPI.
+/// @client-confirm C5 — assumed Mon–Sat 08:00–17:00, 480 productive minutes.
+model TechnicianShift {
+  id               String   @id @default(cuid())
+  technicianId     String
+  workDate         DateTime @db.Date
+  startAt          DateTime
+  endAt            DateTime
+  availableMinutes Int      @default(480)
+  note             String?
+
+  technician Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@unique([technicianId, workDate])
+  @@index([workDate])
+  @@map("technician_shifts")
+}
+
+model JobAssignment {
+  id           String    @id @default(cuid())
+  jobId        String
+  crewId       String
+  assignedById String?
+  assignedAt   DateTime  @default(now())
+  sequenceNo   Int       @default(1) // route order within the crew's day
+  etaAt        DateTime?
+  unassignedAt DateTime?
+
+  job        Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  crew       Crew  @relation(fields: [crewId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([crewId, assignedAt])
+  @@map("job_assignments")
+}

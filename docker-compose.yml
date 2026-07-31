@@ -1,0 +1,46 @@
+# Local development services.
+# Docker is not installed on this machine yet — see README for the alternative
+# (Postgres native install or a hosted Neon/Supabase branch).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nbc-postgres
+    environment:
+      POSTGRES_USER: nbc
+      POSTGRES_PASSWORD: nbc
+      POSTGRES_DB: nbc_service
+      TZ: Asia/Bangkok
+    ports:
+      - '5432:5432'
+    volumes:
+      - nbc-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nbc -d nbc_service']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: nbc-redis
+    ports:
+      - '6379:6379'
+
+  # S3-compatible storage for field photos / PDFs during development.
+  # Mirrors the production adapter (Cloudflare R2 or AWS S3) exactly.
+  minio:
+    image: minio/minio:latest
+    container_name: nbc-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nbc
+      MINIO_ROOT_PASSWORD: nbcnbcnbc
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - nbc-minio:/data
+
+volumes:
+  nbc-pgdata:
+  nbc-minio:

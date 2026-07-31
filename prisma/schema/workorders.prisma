@@ -1,0 +1,170 @@
+// ---------------------------------------------------------------------------
+// Work orders — the three specialised forms (requirement #4) and the field
+// report (requirement #3).
+//
+// Hybrid design: stable columns for anything queried or reported on, versioned
+// JSONB for template-specific fields.
+//
+// Three details that will save pain later:
+//   1. templateVersion is stored ON the work order — a 2026 PDF still renders
+//      exactly as issued after the form changes in 2027.
+//   2. Signature.payloadHash binds the signature to the exact content signed.
+//      That is the difference between a picture of a signature and evidence.
+//   3. DocumentRender is append-only — amendments create a new current PDF and
+//      the superseded one stays retrievable.
+// ---------------------------------------------------------------------------
+
+/// @client-confirm A1/A2/A3 — v1 schemas are drafted from the work-process page
+/// published on nbcgroup.co.th (which already specifies the measurements to
+/// record). Publishing v2 from the client's real paper forms is inserting a row.
+model FormTemplate {
+  id             String   @id @default(cuid())
+  code           FormCode
+  version        Int
+  titleTh        String
+  titleEn        String?
+  /// Field definitions consumed by the dynamic renderer + zod validator.
+  schema         Json
+  pdfTemplateKey String
+  isActive       Boolean  @default(true)
+  publishedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  workOrders WorkOrder[]
+
+  @@unique([code, version])
+  @@index([code, isActive])
+  @@map("form_templates")
+}
+
+model WorkOrder {
+  id              String          @id @default(cuid())
+  jobId           String
+  templateId      String
+  /// Denormalised so historical rendering never depends on a join that may
+  /// have been superseded.
+  templateCode    FormCode
+  templateVersion Int
+  docNo           String          @unique // NBC-PM-2569-00001
+  payload         Json
+  status          WorkOrderStatus @default(DRAFT)
+
+  submittedById String?
+  submittedAt   DateTime?
+  approvedById  String?
+  approvedAt    DateTime?
+  returnReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  job         Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  template    FormTemplate     @relation(fields: [templateId], references: [id])
+  submittedBy User?            @relation("WorkOrderSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  approvedBy  User?            @relation("WorkOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  report      JobReport?
+  parts       JobPart[]
+  signatures  Signature[]
+  renders     DocumentRender[]
+
+  @@index([jobId])
+  @@index([status])
+  @@index([templateCode, createdAt])
+  @@map("work_orders")
+}
+
+/// Field report. The measurements JSON mirrors Step 4 of the client's own
+/// published work process: voltage, amperage, refrigerant pressure and
+/// evaporator inlet temperature — so technicians recognise the form.
+model JobReport {
+  id             String  @id @default(cuid())
+  workOrderId    String  @unique
+  findings       String? // สิ่งที่ตรวจพบ
+  rootCause      String? // สาเหตุ
+  actionTaken    String? // การแก้ไข
+  recommendation String? // ข้อเสนอแนะ
+  /// { volts, amps, refrigerantPressurePsi, evapInletTempC, supplyTempC, returnTempC }
+  measurements   Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@map("job_reports")
+}
+
+/// Spare parts consumed. Name and price are snapshotted so historical work
+/// orders remain accurate after the catalogue changes.
+model JobPart {
+  id               String  @id @default(cuid())
+  workOrderId      String
+  partId           String?
+  partNameSnapshot String
+  qty              Decimal @db.Decimal(10, 2)
+  unitPrice        Decimal @db.Decimal(12, 2)
+  serialNo         String?
+  warrantyMonths   Int?
+
+  createdAt DateTime @default(now())
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  part      Part?     @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId])
+  @@index([partId])
+  @@map("job_parts")
+}
+
+model Signature {
+  id             String     @id @default(cuid())
+  workOrderId    String
+  signerRole     SignerRole
+  signerName     String
+  signerPosition String?
+  storageKey     String
+  signedAt       DateTime   @default(now())
+  deviceInfo     String?
+  ip             String?
+  /// SHA-256 of the work-order payload AT the moment of signing. If the payload
+  /// is later amended the mismatch is detectable.
+  payloadHash    String
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@map("signatures")
+}
+
+/// Append-only. Regeneration produces a new row; never overwrite.
+model DocumentRender {
+  id              String         @id @default(cuid())
+  workOrderId     String
+  format          DocumentFormat @default(PDF)
+  storageKey      String
+  sha256          String
+  templateVersion Int
+  isCurrent       Boolean        @default(true)
+  renderedAt      DateTime       @default(now())
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId, isCurrent])
+  @@map("document_renders")
+}
+
+/// Gap-free, concurrency-safe document numbering.
+/// @client-confirm A9/A10 — format pattern and Buddhist vs Christian era.
+/// Default pattern: NBC-{FORM}-{BE}-{SEQ:05}  →  NBC-PM-2569-00001
+model DocumentSequence {
+  id           String              @id @default(cuid())
+  code         String              @unique // JOB | INSPECTION_REQUEST | CLEANING_PM | REPAIR | QUOTATION
+  format       String
+  currentValue Int                 @default(0)
+  resetPolicy  SequenceResetPolicy @default(YEARLY)
+  /// The period key the counter was last reset for, e.g. "2569".
+  lastResetKey String?
+  updatedAt    DateTime            @updatedAt
+
+  @@map("document_sequences")
+}

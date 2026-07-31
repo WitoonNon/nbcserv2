@@ -1,0 +1,137 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   NBC Group design tokens.
+
+   Colours sampled from the live site (nbcgroup.co.th) so the new application
+   reads as the same company without rebuilding the marketing site.
+
+   The logo carries a cool-blue -> warm-orange gradient — a deliberate
+   cold/hot air-conditioning metaphor. `--gradient-brand` reproduces it for
+   headers and accents.
+--------------------------------------------------------------------------- */
+
+@theme {
+  /* Brand */
+  --color-brand-orange: #e4750e;
+  --color-brand-orange-600: #c96409;
+  --color-brand-orange-50: #fff4e8;
+  --color-brand-blue: #2891bd;
+  --color-brand-blue-600: #0c76a2;
+  --color-brand-teal: #09455e;
+  --color-brand-navy: #132945;
+  --color-brand-navy-900: #00214d;
+  --color-brand-sky: #6ec1e4;
+  --color-brand-sky-50: #eff8fc;
+
+  /* Neutrals — matched to the site's body copy */
+  --color-ink: #22313f;
+  --color-ink-soft: #333333;
+  --color-muted: #7a7a7a;
+  --color-line: #d8dee6;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f5f7fa;
+
+  /* Job pipeline — deliberately distinct from brand colours so status is never
+     confused with branding. */
+  --color-status-draft: #94a3b8;
+  --color-status-scheduled: #2891bd;
+  --color-status-assigned: #6366f1;
+  --color-status-enroute: #8b5cf6;
+  --color-status-onsite: #d97706;
+  --color-status-progress: #e4750e;
+  --color-status-quote: #eab308;
+  --color-status-done: #16a34a;
+  --color-status-closed: #64748b;
+  --color-status-cancelled: #dc2626;
+
+  /* Typography — Mitr for headings (as on the site), Sarabun for body.
+     Sarabun is used for tables and PDFs: Mitr is a display face and reads
+     poorly at 13–14px in dense data, and Sarabun is the Thai government
+     document standard, which suits printed work orders. */
+  --font-heading: var(--font-mitr), 'Leelawadee UI', Tahoma, sans-serif;
+  --font-sans: var(--font-sarabun), 'Leelawadee UI', Tahoma, sans-serif;
+
+  --radius-brand: 3px; /* the site's button radius */
+}
+
+:root {
+  --gradient-brand: linear-gradient(100deg, #1f5fa8 0%, #2891bd 28%, #e4750e 78%, #e03b1e 100%);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--color-surface-alt);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    /* Thai has no inter-word spaces, so long runs have few break
+       opportunities. Safety net for unbroken strings (URLs, part codes). */
+    overflow-wrap: break-word;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    color: var(--color-brand-teal);
+    line-height: 1.3;
+  }
+
+  /* Thai text needs a little more leading than Latin at the same size. */
+  :lang(th) {
+    line-height: 1.7;
+    /* Break Thai at dictionary phrase boundaries rather than mid-word — the
+       difference between readable and ransom-note Thai on narrow screens. */
+    word-break: auto-phrase;
+  }
+
+  /* Technician PWA is used outdoors in bright sun and with gloves on:
+     never shrink tap targets below 44px. */
+  button,
+  a[role='button'] {
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  .brand-gradient {
+    background: var(--gradient-brand);
+  }
+
+  .brand-gradient-text {
+    background: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+  }
+
+  /* Marks any value that is still a placeholder awaiting client confirmation.
+     Visible in the admin UI so nobody mistakes a seeded assumption for a
+     confirmed business rule. */
+  .assumption-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-brand-orange-50);
+    color: #8a4b00;
+    border: 1px solid #f0d5b6;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}

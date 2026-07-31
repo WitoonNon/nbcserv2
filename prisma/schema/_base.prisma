@@ -1,0 +1,237 @@
+// ---------------------------------------------------------------------------
+// NBC Group — Service Management
+// Base: datasource, generator, and enums shared across modules.
+//
+// Convention: values marked @client-confirm are placeholders chosen from the
+// client's public site or standard practice. They live in DATA (seed rows /
+// AppConfig), never in code, so they change without a migration.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/prisma"
+}
+
+// Prisma 7: the connection URL lives in prisma.config.ts (for the CLI) and is
+// passed to PrismaClient via a driver adapter at runtime — see src/lib/db.
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Service shape ---------------------------------------------------------
+
+enum ServiceCategory {
+  INSPECTION_REPAIR // ใบตรวจเช็ค/แจ้งซ่อม
+  CLEANING_PM // ใบล้าง/PM
+  REPAIR // ใบซ่อม
+  INSTALLATION // ติดตั้ง (out of base scope, modelled for later)
+}
+
+/// @client-confirm C4 — the client must define their own size bands.
+enum JobSize {
+  S
+  M
+  L
+  XL
+}
+
+enum AcType {
+  WALL // แอร์ติดผนัง
+  CEILING // แอร์แขวน
+  STANDING // แอร์ตู้ตั้ง
+  CASSETTE_4WAY // แอร์ฝังฝ้า 4 ทิศทาง
+  CONCEALED_SMALL // แอร์ซ่อนในฝ้า (เล็ก)
+  CONCEALED_LARGE // แอร์ซ่อนในฝ้า (ใหญ่)
+  VRV_VRF
+  AHU
+  CHILLER
+  OTHER
+}
+
+enum PricingTier {
+  CONTRACT // ลูกค้าในสัญญา
+  STANDARD // ลูกค้าทั่วไป
+}
+
+// --- Customers -------------------------------------------------------------
+
+enum CustomerType {
+  INDIVIDUAL
+  CORPORATE
+}
+
+enum CustomerSegment {
+  FACTORY
+  HOSPITAL
+  HOTEL
+  OFFICE
+  MALL
+  RESIDENTIAL
+  GOVERNMENT
+  OTHER
+}
+
+enum IdentityProvider {
+  LINE
+  PHONE_OTP
+  EMAIL
+}
+
+// --- Contracts -------------------------------------------------------------
+
+enum ContractType {
+  ANNUAL
+  MONTHLY
+  PER_VISIT
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+// --- Jobs ------------------------------------------------------------------
+
+enum JobStatus {
+  DRAFT
+  SUBMITTED
+  SCHEDULED
+  ASSIGNED
+  EN_ROUTE
+  ON_SITE
+  IN_PROGRESS
+  PENDING_QUOTE
+  QUOTE_APPROVED
+  QUOTE_REJECTED
+  COMPLETED
+  REPORT_APPROVED
+  CLOSED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum JobPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum CreatedVia {
+  WEB
+  LINE
+  PHONE
+  ADMIN
+}
+
+/// Why an inspection fee was not charged. NULL means the fee applied normally.
+enum FeeWaiveReason {
+  CONTRACT // ลูกค้าในสัญญา — the client's public "free diagnostic" promise
+  PROMOTION
+  MANUAL
+}
+
+// --- Scheduling / quota ----------------------------------------------------
+
+enum QuotaScopeType {
+  DATE
+  WEEKDAY
+  DATE_RANGE
+}
+
+enum QuotaDayStatus {
+  OPEN
+  FULL
+  MANUALLY_CLOSED
+  HOLIDAY
+}
+
+// --- Work orders -----------------------------------------------------------
+
+enum FormCode {
+  INSPECTION_REQUEST // ใบตรวจเช็ค/แจ้งซ่อม
+  CLEANING_PM // ใบล้าง/PM
+  REPAIR // ใบซ่อม
+}
+
+enum WorkOrderStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RETURNED
+}
+
+enum SignerRole {
+  CUSTOMER
+  TECHNICIAN
+  SUPERVISOR
+}
+
+enum DocumentFormat {
+  PDF
+}
+
+enum SequenceResetPolicy {
+  NEVER
+  YEARLY
+  MONTHLY
+}
+
+// --- Billing ---------------------------------------------------------------
+
+enum ChargeType {
+  INSPECTION_FEE
+  INSPECTION_FEE_CREDIT
+  LABOUR
+  PART
+  TRAVEL
+  SURCHARGE
+  DISCOUNT
+}
+
+enum ChargeSource {
+  AUTO_POLICY
+  MANUAL
+}
+
+enum CreditMode {
+  FULL
+  PARTIAL
+  CAPPED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+// --- Media / notifications -------------------------------------------------
+
+enum AttachmentKind {
+  BEFORE
+  AFTER
+  DEFECT
+  NAMEPLATE
+  SERIAL
+  DOCUMENT
+  SIGNATURE
+  OTHER
+}
+
+enum NotificationChannel {
+  LINE
+  EMAIL
+  SMS
+  IN_APP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}

@@ -1,0 +1,137 @@
+// ---------------------------------------------------------------------------
+// Billing — inspection fee, credit, quotations (requirement #2).
+//
+// The fee is modelled as an APPEND-ONLY CHARGE LEDGER, never as a mutable
+// number on the job. Net payable is always SUM(amountSigned): reproducible,
+// auditable, and never wrong because someone edited a field.
+//
+//   Job created, non-contract customer  ->  +INSPECTION_FEE        (+500)
+//   Job created, contract customer      ->  no row; Job.feeWaivedReason = CONTRACT
+//   Customer declines the repair        ->  fee stands, invoiced
+//   Customer approves the repair        ->  +INSPECTION_FEE_CREDIT (-500)
+// ---------------------------------------------------------------------------
+
+/// @client-confirm B1–B6 — amount, variation by area/type, credit mode,
+/// minimum job value, contract waiver, collection timing.
+model InspectionFeePolicy {
+  id       String           @id @default(cuid())
+  name     String
+  category ServiceCategory?
+  zoneId   String?
+
+  amount   Decimal @db.Decimal(12, 2)
+  currency String  @default("THB")
+
+  /// Their site promises free diagnostics for contract customers.
+  waiveForContractCustomer Boolean @default(true)
+
+  /// Credit the fee back when the customer proceeds with the repair.
+  creditOnProceed Boolean    @default(true)
+  creditMode      CreditMode @default(FULL)
+  /// Used by PARTIAL (percent) and CAPPED (absolute ceiling).
+  creditValue     Decimal?   @db.Decimal(12, 2)
+
+  /// @client-confirm B4 — stops a ฿500 credit landing on a ฿600 job.
+  minJobValueForCredit Decimal? @db.Decimal(12, 2)
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  zone    Zone?       @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  charges JobCharge[]
+
+  @@index([category, isActive])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("inspection_fee_policies")
+}
+
+/// Append-only ledger. Credits are stored as negative amountSigned.
+model JobCharge {
+  id           String     @id @default(cuid())
+  jobId        String
+  type         ChargeType
+  description  String
+  qty          Decimal    @default(1) @db.Decimal(10, 2)
+  unitPrice    Decimal    @db.Decimal(12, 2)
+  /// Signed: positive = payable, negative = credit/discount.
+  amountSigned Decimal    @db.Decimal(12, 2)
+
+  source      ChargeSource @default(MANUAL)
+  policyId    String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+
+  job       Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  policy    InspectionFeePolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  createdBy User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([jobId, type])
+  @@index([createdAt])
+  @@map("job_charges")
+}
+
+model Quotation {
+  id          String          @id @default(cuid())
+  quotationNo String          @unique
+  jobId       String?
+  customerId  String
+  status      QuotationStatus @default(DRAFT)
+
+  subtotal   Decimal @default(0) @db.Decimal(12, 2)
+  discount   Decimal @default(0) @db.Decimal(12, 2)
+  /// @client-confirm B7 — prices assumed VAT-exclusive, VAT 7%.
+  vatRate    Decimal @default(7) @db.Decimal(5, 2)
+  vatAmount  Decimal @default(0) @db.Decimal(12, 2)
+  grandTotal Decimal @default(0) @db.Decimal(12, 2)
+
+  validUntil     DateTime?
+  approvedById   String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  job        Job?            @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  customer   Customer        @relation(fields: [customerId], references: [id])
+  approvedBy User?           @relation("QuotationApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lines      QuotationLine[]
+
+  @@index([jobId])
+  @@index([customerId, status])
+  @@map("quotations")
+}
+
+model QuotationLine {
+  id          String  @id @default(cuid())
+  quotationId String
+  partId      String?
+  description String
+  qty         Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  amount      Decimal @db.Decimal(12, 2)
+  sortOrder   Int     @default(0)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  part      Part?     @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId])
+  @@map("quotation_lines")
+}
+
+/// @client-confirm F7 — who may approve an on-site quotation, and below what
+/// value a lead technician can approve alone.
+model ApprovalPolicy {
+  id                     String   @id @default(cuid())
+  code                   String   @unique // ONSITE_QUOTATION
+  description            String?
+  maxAmountForTechnician Decimal  @default(2000) @db.Decimal(12, 2)
+  requiresRoleCode       String   @default("SUPERVISOR")
+  isActive               Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
+
+  @@map("approval_policies")
+}

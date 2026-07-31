@@ -1,0 +1,67 @@
+{
+  "app": {
+    "name": "NBC Service",
+    "fullName": "Repair & Service Management",
+    "company": "NBC Group Co., Ltd."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "jobs": "Jobs",
+    "dispatch": "Dispatch",
+    "schedule": "Schedule",
+    "customers": "Customers",
+    "assets": "Asset registry",
+    "workOrders": "Work orders",
+    "quotations": "Quotations",
+    "reports": "Reports",
+    "settings": "Settings",
+    "quota": "Daily quota",
+    "catalog": "Services & pricing",
+    "forms": "Forms",
+    "myJobs": "My jobs",
+    "history": "History",
+    "booking": "Book a service"
+  },
+  "category": {
+    "INSPECTION_REPAIR": "Inspection / Repair request",
+    "CLEANING_PM": "Cleaning / PM",
+    "REPAIR": "Repair",
+    "INSTALLATION": "Installation"
+  },
+  "status": {
+    "DRAFT": "Draft",
+    "SUBMITTED": "Submitted",
+    "SCHEDULED": "Scheduled",
+    "ASSIGNED": "Assigned",
+    "EN_ROUTE": "En route",
+    "ON_SITE": "On site",
+    "IN_PROGRESS": "In progress",
+    "PENDING_QUOTE": "Pending quotation",
+    "QUOTE_APPROVED": "Quotation approved",
+    "QUOTE_REJECTED": "Quotation rejected",
+    "COMPLETED": "Completed",
+    "REPORT_APPROVED": "Report approved",
+    "CLOSED": "Closed",
+    "CANCELLED": "Cancelled",
+    "RESCHEDULED": "Rescheduled"
+  },
+  "quota": {
+    "open": "Available",
+    "full": "Full",
+    "closed": "Closed",
+    "holiday": "Holiday",
+    "remaining": "Remaining",
+    "jobs": "jobs",
+    "units": "units",
+    "minutes": "min"
+  },
+  "common": {
+    "search": "Search",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "loading": "Loading...",
+    "empty": "No data yet",
+    "assumption": "Assumption — awaiting client confirmation"
+  }
+}

@@ -1,0 +1,145 @@
+// ---------------------------------------------------------------------------
+// Scheduling & daily dynamic quotas (requirement #1).
+//
+// Two layers: QuotaRule is what an admin configures; QuotaDay is the
+// materialised bucket that booking actually checks and locks. Booking takes a
+// row-level lock on QuotaDay (SELECT ... FOR UPDATE) so two customers racing
+// for the last slot cannot both win.
+// ---------------------------------------------------------------------------
+
+/// @client-confirm C3 — seeded with one default zone (BKK-METRO). Adding real
+/// zones is inserting rows; no schema change.
+model Zone {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  nameTh    String
+  nameEn    String?
+  provinces String[] @default([])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  sites       CustomerSite[]
+  quotaRules  QuotaRule[]
+  quotaDays   QuotaDay[]
+  jobs        Job[]
+  technicians Technician[]
+  crews       Crew[]
+  feePolicies InspectionFeePolicy[]
+
+  @@map("zones")
+}
+
+model QuotaRule {
+  id            String         @id @default(cuid())
+  name          String
+  scopeType     QuotaScopeType @default(WEEKDAY)
+  effectiveFrom DateTime       @db.Date
+  effectiveTo   DateTime?      @db.Date
+
+  /// Bitmask, bit 0 = Sunday … bit 6 = Saturday. 126 = Mon–Sat.
+  /// @client-confirm C5 — working days.
+  weekdayMask Int @default(126)
+
+  zoneId   String?
+  category ServiceCategory
+  jobSize  JobSize?
+
+  /// All three limits are nullable — NULL means "unlimited on this axis".
+  /// @client-confirm C1/C2 — the client picks which axes they actually want.
+  maxJobs              Int?
+  maxUnits             Int?
+  maxTechnicianMinutes Int?
+
+  /// Higher priority wins when several rules match the same day.
+  priority  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  zone Zone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+
+  @@index([category, isActive])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("quota_rules")
+}
+
+/// Materialised nightly from QuotaRule for a rolling horizon (default 90 days).
+/// Re-materialising on a rule change must never disturb consumed counters.
+model QuotaDay {
+  id        String          @id @default(cuid())
+  quotaDate DateTime        @db.Date
+  zoneId    String
+  category  ServiceCategory
+  jobSize   JobSize
+
+  capacityJobs    Int?
+  capacityUnits   Int?
+  capacityMinutes Int?
+
+  usedJobs    Int @default(0)
+  usedUnits   Int @default(0)
+  usedMinutes Int @default(0)
+
+  status    QuotaDayStatus @default(OPEN)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  zone      Zone               @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  jobs      Job[]
+  holds     QuotaHold[]
+  overrides QuotaOverrideLog[]
+
+  @@unique([quotaDate, zoneId, category, jobSize])
+  @@index([quotaDate, status])
+  @@map("quota_days")
+}
+
+/// Soft lock while a customer completes the booking form. Expired holds are
+/// swept by a background job; capacity checks count live holds.
+model QuotaHold {
+  id         String   @id @default(cuid())
+  quotaDayId String
+  sessionKey String
+  units      Int      @default(1)
+  minutes    Int      @default(0)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  quotaDay QuotaDay @relation(fields: [quotaDayId], references: [id], onDelete: Cascade)
+
+  @@index([quotaDayId])
+  @@index([expiresAt])
+  @@index([sessionKey])
+  @@map("quota_holds")
+}
+
+/// @client-confirm C9 — every override of a full day is recorded with actor
+/// and reason. Never silently exceed a quota.
+model QuotaOverrideLog {
+  id           String   @id @default(cuid())
+  quotaDayId   String
+  actorId      String?
+  reason       String
+  deltaJobs    Int      @default(0)
+  deltaUnits   Int      @default(0)
+  deltaMinutes Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  quotaDay QuotaDay @relation(fields: [quotaDayId], references: [id], onDelete: Cascade)
+  actor    User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([quotaDayId])
+  @@map("quota_override_logs")
+}
+
+/// @client-confirm C8 — this year's public holiday list.
+model Holiday {
+  id           String   @id @default(cuid())
+  date         DateTime @unique @db.Date
+  nameTh       String
+  nameEn       String?
+  isWorkingDay Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@map("holidays")
+}

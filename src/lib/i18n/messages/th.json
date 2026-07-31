@@ -1,0 +1,67 @@
+{
+  "app": {
+    "name": "NBC Service",
+    "fullName": "ระบบบริหารงานซ่อมและบริการ",
+    "company": "บริษัท เอ็นบีซี กรุ๊ป จำกัด"
+  },
+  "nav": {
+    "dashboard": "ภาพรวม",
+    "jobs": "งานทั้งหมด",
+    "dispatch": "จ่ายงาน",
+    "schedule": "ตารางงาน",
+    "customers": "ลูกค้า",
+    "assets": "ทะเบียนเครื่อง",
+    "workOrders": "ใบงาน",
+    "quotations": "ใบเสนอราคา",
+    "reports": "รายงาน",
+    "settings": "ตั้งค่า",
+    "quota": "โควตารายวัน",
+    "catalog": "บริการและราคา",
+    "forms": "แบบฟอร์ม",
+    "myJobs": "งานของฉัน",
+    "history": "ประวัติงาน",
+    "booking": "จองคิว"
+  },
+  "category": {
+    "INSPECTION_REPAIR": "ตรวจเช็ค/แจ้งซ่อม",
+    "CLEANING_PM": "ล้างแอร์/PM",
+    "REPAIR": "ซ่อม",
+    "INSTALLATION": "ติดตั้ง"
+  },
+  "status": {
+    "DRAFT": "ร่าง",
+    "SUBMITTED": "รับเรื่องแล้ว",
+    "SCHEDULED": "นัดหมายแล้ว",
+    "ASSIGNED": "จ่ายงานแล้ว",
+    "EN_ROUTE": "ช่างกำลังเดินทาง",
+    "ON_SITE": "ถึงหน้างาน",
+    "IN_PROGRESS": "กำลังดำเนินการ",
+    "PENDING_QUOTE": "รออนุมัติราคา",
+    "QUOTE_APPROVED": "อนุมัติราคาแล้ว",
+    "QUOTE_REJECTED": "ไม่อนุมัติราคา",
+    "COMPLETED": "งานเสร็จ",
+    "REPORT_APPROVED": "อนุมัติรายงานแล้ว",
+    "CLOSED": "ปิดงาน",
+    "CANCELLED": "ยกเลิก",
+    "RESCHEDULED": "เลื่อนนัด"
+  },
+  "quota": {
+    "open": "ว่าง",
+    "full": "เต็ม",
+    "closed": "ปิดรับ",
+    "holiday": "วันหยุด",
+    "remaining": "เหลือ",
+    "jobs": "งาน",
+    "units": "เครื่อง",
+    "minutes": "นาที"
+  },
+  "common": {
+    "search": "ค้นหา",
+    "save": "บันทึก",
+    "cancel": "ยกเลิก",
+    "confirm": "ยืนยัน",
+    "loading": "กำลังโหลด...",
+    "empty": "ยังไม่มีข้อมูล",
+    "assumption": "ค่าสมมติ รอลูกค้ายืนยัน"
+  }
+}

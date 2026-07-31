@@ -1,0 +1,130 @@
+// ---------------------------------------------------------------------------
+// Jobs — the operational spine (requirements #1, #3).
+//
+// JobStatusEvent is append-only and is the single source for BOTH the
+// real-time tracker and the analytics layer. Never derive KPIs from the
+// mutable Job.status — derive them from the event stream.
+// ---------------------------------------------------------------------------
+
+model Job {
+  id         String  @id @default(cuid())
+  jobNo      String  @unique // NBC-JOB-2569-00001
+  customerId String
+  siteId     String
+  contractId String?
+  zoneId     String?
+
+  category ServiceCategory
+  jobSize  JobSize         @default(S)
+  status   JobStatus       @default(DRAFT)
+  priority JobPriority     @default(NORMAL)
+
+  requestedDate       DateTime? @db.Date
+  scheduledDate       DateTime? @db.Date
+  scheduledWindowFrom DateTime?
+  scheduledWindowTo   DateTime?
+  quotaDayId          String?
+
+  /// Sum of standardDurationMin across JobAsset rows; the value consumed from
+  /// QuotaDay.usedMinutes. Kept denormalised so quota maths is one read.
+  estimatedMinutes Int @default(0)
+  unitCount        Int @default(1)
+
+  /// Derived from the contract SLA at creation time (public promise: 1 business day).
+  slaDueAt DateTime?
+
+  /// NULL means the inspection fee applied normally.
+  feeWaivedReason FeeWaiveReason?
+
+  createdVia         CreatedVia @default(WEB)
+  problemDescription String?
+  internalNotes      String?
+  createdById        String?
+  cancelledReason    String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  customer      Customer          @relation(fields: [customerId], references: [id])
+  site          CustomerSite      @relation(fields: [siteId], references: [id])
+  contract      Contract?         @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  zone          Zone?             @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  quotaDay      QuotaDay?         @relation(fields: [quotaDayId], references: [id], onDelete: SetNull)
+  createdBy     User?             @relation("JobCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  assets        JobAsset[]
+  statusEvents  JobStatusEvent[]
+  notes         JobNote[]
+  assignments   JobAssignment[]
+  workOrders    WorkOrder[]
+  charges       JobCharge[]
+  quotations    Quotation[]
+  notifications NotificationLog[]
+
+  @@index([scheduledDate, status])
+  @@index([customerId])
+  @@index([siteId])
+  @@index([status])
+  @@index([zoneId, scheduledDate])
+  @@index([quotaDayId])
+  @@map("jobs")
+}
+
+/// One job may cover many AC units — a factory PM can be 40 units in one visit.
+/// This is why quotas count maxUnits alongside maxJobs.
+/// @client-confirm C1 — confirm quotas should cap on units, not only job count.
+model JobAsset {
+  id                   String  @id @default(cuid())
+  jobId                String
+  assetId              String?
+  serviceCatalogItemId String?
+
+  /// Snapshot so the job still reads correctly if the asset is later edited.
+  acTypeSnapshot      AcType?
+  descriptionSnapshot String?
+  quantity            Int     @default(1)
+  durationMin         Int     @default(0)
+  note                String?
+
+  job     Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  asset   Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  service ServiceCatalogItem? @relation(fields: [serviceCatalogItemId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([assetId])
+  @@map("job_assets")
+}
+
+/// APPEND ONLY. Powers live tracking, SLA measurement and all analytics.
+model JobStatusEvent {
+  id         String     @id @default(cuid())
+  jobId      String
+  fromStatus JobStatus?
+  toStatus   JobStatus
+  actorId    String?
+  actorRole  String?
+  occurredAt DateTime   @default(now())
+  lat        Float?
+  lng        Float?
+  note       String?
+
+  job   Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([jobId, occurredAt])
+  @@index([toStatus, occurredAt])
+  @@map("job_status_events")
+}
+
+model JobNote {
+  id         String   @id @default(cuid())
+  jobId      String
+  authorId   String?
+  body       String
+  isInternal Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  job    Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@map("job_notes")
+}

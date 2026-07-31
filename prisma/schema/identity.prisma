@@ -1,0 +1,120 @@
+// ---------------------------------------------------------------------------
+// Identity — users, RBAC, sessions, audit.
+// Staff authenticate with credentials; customers link an external identity
+// (LINE / phone OTP) via CustomerIdentity in the customers module.
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String?   @unique
+  phone        String?   @unique
+  passwordHash String?
+  totpSecret   String?
+  name         String
+  avatarKey    String?
+  locale       String    @default("th")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  roles            UserRole[]
+  sessions         Session[]
+  auditLogs        AuditLog[]
+  technician       Technician?
+  customerContact  CustomerContact?
+  jobStatusEvents  JobStatusEvent[]
+  jobsCreated      Job[]              @relation("JobCreatedBy")
+  notes            JobNote[]
+  assignmentsMade  JobAssignment[]    @relation("AssignedBy")
+  workOrdersSubmit WorkOrder[]        @relation("WorkOrderSubmittedBy")
+  workOrdersReview WorkOrder[]        @relation("WorkOrderApprovedBy")
+  chargesCreated   JobCharge[]
+  quotaOverrides   QuotaOverrideLog[]
+  quotationsAppr   Quotation[]        @relation("QuotationApprovedBy")
+  attachments      Attachment[]
+
+  @@index([isActive])
+  @@map("users")
+}
+
+model Role {
+  id       String  @id @default(cuid())
+  code     String  @unique // SUPER_ADMIN | ADMIN | DISPATCHER | SUPERVISOR | TECHNICIAN | CUSTOMER | ACCOUNTING
+  nameTh   String
+  nameEn   String
+  isSystem Boolean @default(false)
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  code        String  @unique // e.g. job.create, quota.override, workorder.approve
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Append-only. Written by the service layer on every mutating operation that
+/// touches money, quota, or a signed document.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String // e.g. quota.override, charge.credit, workorder.approve
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

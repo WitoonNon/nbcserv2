@@ -1,0 +1,29 @@
+// ---------------------------------------------------------------------------
+// Platform — runtime configuration.
+//
+// This table is the mechanism behind "every unanswered client question becomes
+// a database row, never a hardcoded constant". Anything the client has not yet
+// confirmed is read from here at runtime.
+// ---------------------------------------------------------------------------
+
+model AppConfig {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  value        Json
+  description  String?
+  /// True while the value is still a placeholder awaiting client confirmation.
+  isAssumption Boolean  @default(false)
+  updatedAt    DateTime @updatedAt
+
+  @@map("app_config")
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  enabled     Boolean  @default(false)
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("feature_flags")
+}

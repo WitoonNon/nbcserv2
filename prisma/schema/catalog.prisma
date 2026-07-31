@@ -1,0 +1,81 @@
+// ---------------------------------------------------------------------------
+// Service catalogue & parts.
+//
+// Prices are versioned by validity window and never edited in place — a work
+// order printed last year must still reproduce last year's price.
+// ---------------------------------------------------------------------------
+
+model ServiceCatalogItem {
+  id       String          @id @default(cuid())
+  code     String // CLEAN-WALL-24K — stable across price versions
+  category ServiceCategory
+  jobSize  JobSize         @default(S)
+  acType   AcType?
+  btuMin   Int?
+  btuMax   Int?
+  nameTh   String
+  nameEn   String?
+
+  /// Published on nbcgroup.co.th: 30 (wall) / 40 (ceiling, standing) /
+  /// 60 (cassette 4-way) / 90 (concealed). This is the capacity unit that
+  /// makes minute-based quotas meaningful.
+  standardDurationMin Int
+
+  /// Two-tier pricing, exactly as published. VAT-exclusive.
+  /// @client-confirm B7 (VAT in/ex), D1 (real internal price list)
+  priceContract Decimal @db.Decimal(12, 2)
+  priceStandard Decimal @db.Decimal(12, 2)
+
+  /// How many technicians the job normally needs (cleaning is a 2-person job).
+  /// @client-confirm F2
+  crewSize Int @default(2)
+
+  activeFrom DateTime  @default(now())
+  activeTo   DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  jobAssets        JobAsset[]
+  contractServices ContractIncludedService[]
+
+  @@unique([code, activeFrom])
+  @@index([category, jobSize])
+  @@index([acType])
+  @@index([isActive, activeFrom, activeTo])
+  @@map("service_catalog_items")
+}
+
+model PartCategory {
+  id     String  @id @default(cuid())
+  code   String  @unique
+  nameTh String
+  nameEn String?
+
+  parts Part[]
+
+  @@map("part_categories")
+}
+
+/// @client-confirm D5/D6 — real catalogue and the 15–20 most-replaced parts.
+model Part {
+  id             String   @id @default(cuid())
+  sku            String   @unique
+  categoryId     String?
+  nameTh         String
+  nameEn         String?
+  unit           String   @default("ชิ้น")
+  defaultPrice   Decimal  @db.Decimal(12, 2)
+  warrantyMonths Int?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category PartCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  jobParts JobPart[]
+  quoteLns QuotationLine[]
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("parts")
+}

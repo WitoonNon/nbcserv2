@@ -1,0 +1,41 @@
+// ---------------------------------------------------------------------------
+// Media — field photos, signatures, documents (requirement #6).
+//
+// Polymorphic by (entityType, entityId) so photos attach to a job, a work
+// order, an asset or a quotation without a table per owner.
+//
+// Pipeline: client-side downscale (<=1600px, WebP/JPEG q78) -> presigned direct
+// PUT to object storage -> worker generates a thumbnail -> EXIF timestamp and
+// GPS extracted into columns, then stripped on delivery.
+// ---------------------------------------------------------------------------
+
+model Attachment {
+  id         String         @id @default(cuid())
+  entityType String // Job | WorkOrder | Asset | Quotation | CustomerSite
+  entityId   String
+  kind       AttachmentKind @default(OTHER)
+
+  storageKey String
+  thumbKey   String?
+  mime       String
+  bytes      Int
+  /// Content hash — tamper evidence and dedupe.
+  sha256     String
+
+  /// Extracted from EXIF before stripping. Capture time and location are
+  /// genuinely useful in a dispute ("was the technician actually there?").
+  exifTakenAt DateTime?
+  lat         Float?
+  lng         Float?
+
+  caption      String?
+  sortOrder    Int      @default(0)
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, kind])
+  @@index([sha256])
+  @@map("attachments")
+}

@@ -1,0 +1,27 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# generated
+src/generated/
+next-env.d.ts
+*.tsbuildinfo
+
+# local storage adapter target
+.storage/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# test
+coverage/

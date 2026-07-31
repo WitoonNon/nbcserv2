@@ -1,0 +1,68 @@
+// ---------------------------------------------------------------------------
+// Contracts — drives the two-tier pricing published on nbcgroup.co.th and the
+// "free diagnostic checks for contract customers" promise.
+// ---------------------------------------------------------------------------
+
+model Contract {
+  id         String         @id @default(cuid())
+  customerId String
+  contractNo String         @unique
+  type       ContractType   @default(ANNUAL)
+  status     ContractStatus @default(ACTIVE)
+  startsOn   DateTime       @db.Date
+  endsOn     DateTime       @db.Date
+
+  /// Resolves which price column applies. Site publishes CONTRACT vs STANDARD.
+  pricingTier PricingTier @default(CONTRACT)
+
+  /// @client-confirm B5 — their site advertises free diagnostics for contract
+  /// customers, so the fee is WAIVED (no charge row written), not credited.
+  inspectionFeeWaived Boolean @default(true)
+
+  /// @client-confirm E7 — how many PM visits the annual fee includes.
+  includedPmVisitsPerYear Int? @default(2)
+
+  /// Public promise is on-site within 1 business day. @client-confirm E7 —
+  /// confirm what the annual contract actually guarantees.
+  slaResponseHours Int @default(24)
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer         Customer                  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sites            ContractSite[]
+  includedServices ContractIncludedService[]
+  jobs             Job[]
+
+  @@index([customerId])
+  @@index([status, endsOn])
+  @@map("contracts")
+}
+
+/// A contract may cover a subset of the customer's sites.
+model ContractSite {
+  contractId String
+  siteId     String
+
+  contract Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  site     CustomerSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([contractId, siteId])
+  @@map("contract_sites")
+}
+
+model ContractIncludedService {
+  id                   String          @id @default(cuid())
+  contractId           String
+  serviceCatalogItemId String?
+  category             ServiceCategory
+  quantityPerYear      Int
+  notes                String?
+
+  contract Contract            @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  service  ServiceCatalogItem? @relation(fields: [serviceCatalogItemId], references: [id], onDelete: SetNull)
+
+  @@index([contractId])
+  @@map("contract_included_services")
+}
