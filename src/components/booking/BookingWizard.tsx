@@ -34,6 +34,78 @@ const AC_TYPES: { code: AcType; th: string }[] = [
 
 const WEEKDAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
+const TH_MONTHS = [
+  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+];
+
+interface DayCell {
+  date: string;
+  dayOfMonth: number;
+  available: boolean;
+  status: string;
+  remainingJobs: number | null;
+}
+
+interface MonthBlock {
+  key: string;
+  label: string;
+  /** Empty slots before the first bookable day, so columns line up with real weekdays. */
+  leading: number;
+  cells: DayCell[];
+}
+
+/**
+ * Group the flat availability list into months laid out as real calendars.
+ *
+ * The bookable window starts three days out and runs across a month boundary,
+ * so a single flowing strip of numbers reads as "…30, 31, 1, 2…" with no way to
+ * tell which month a date belongs to. Splitting into month blocks and padding
+ * each block to the correct weekday column makes the date unambiguous without
+ * the customer having to reason about it.
+ */
+function toMonthBlocks(
+  days: { date: string; available: boolean; status: string; remainingJobs: number | null }[],
+): MonthBlock[] {
+  const blocks = new Map<string, MonthBlock>();
+
+  for (const d of days) {
+    const date = new Date(`${d.date}T00:00:00Z`);
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
+    const key = `${year}-${month}`;
+
+    let block = blocks.get(key);
+    if (!block) {
+      block = {
+        key,
+        // Buddhist Era on every customer-facing surface — @client-confirm A10.
+        label: `${TH_MONTHS[month]} ${year + 543}`,
+        leading: date.getUTCDay(),
+        cells: [],
+      };
+      blocks.set(key, block);
+    }
+
+    block.cells.push({
+      date: d.date,
+      dayOfMonth: date.getUTCDate(),
+      available: d.available,
+      status: d.status,
+      remainingJobs: d.remainingJobs,
+    });
+  }
+
+  return [...blocks.values()];
+}
+
+/** "2026-08-07" -> "ศุกร์ 7 สิงหาคม 2569" — never show a customer an ISO date. */
+function formatThaiFull(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  return `${dayNames[d.getUTCDay()]} ${d.getUTCDate()} ${TH_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear() + 543}`;
+}
+
 function StepBadge({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -134,7 +206,8 @@ export function BookingWizard({
           <strong className="font-mono text-[var(--color-brand-orange)]">{state.jobNo}</strong>
         </p>
         <p className="text-sm text-[var(--color-muted)]">
-          นัดหมายวันที่ {state.scheduledDate} · เจ้าหน้าที่จะติดต่อกลับเพื่อยืนยันช่วงเวลาอีกครั้ง
+          นัดหมาย{state.scheduledDate ? formatThaiFull(state.scheduledDate) : ''} ·
+          เจ้าหน้าที่จะติดต่อกลับเพื่อยืนยันช่วงเวลาอีกครั้ง
         </p>
         <div className="pt-2">
           <a
@@ -252,45 +325,68 @@ export function BookingWizard({
 
         {!loading && calendar && (
           <>
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-              {calendar.days.map((d) => {
-                const date = new Date(`${d.date}T00:00:00Z`);
-                const closed = !d.available;
-                const chosen = selectedDate === d.date;
-                return (
-                  <button
-                    key={d.date}
-                    type="button"
-                    disabled={closed || holding}
-                    onClick={() => pickDate(d.date)}
-                    className={`border rounded-[3px] p-2 text-center transition-colors ${
-                      chosen
-                        ? 'border-[var(--color-brand-orange)] ring-1 ring-[var(--color-brand-orange)] bg-[var(--color-brand-orange-50)]'
-                        : closed
-                          ? 'opacity-40 cursor-not-allowed bg-[var(--color-surface-alt)] border-[var(--color-line)]'
-                          : 'bg-white border-[var(--color-line)] hover:border-[var(--color-brand-orange)] cursor-pointer'
-                    }`}
-                  >
-                    <p className="text-[10px] text-[var(--color-muted)]">
-                      {WEEKDAYS[date.getUTCDay()]}
-                    </p>
-                    <p className="font-[family-name:var(--font-heading)] text-lg leading-tight">
-                      {date.getUTCDate()}
-                    </p>
-                    <p className="text-[9px] text-[var(--color-muted)] leading-tight">
-                      {d.status === 'HOLIDAY'
-                        ? 'วันหยุด'
-                        : d.status === 'FULL'
-                          ? 'เต็ม'
-                          : closed
-                            ? 'ปิดรับ'
-                            : d.remainingJobs !== null
-                              ? `เหลือ ${d.remainingJobs}`
-                              : 'ว่าง'}
-                    </p>
-                  </button>
-                );
-              })}
+            <div className="space-y-5">
+              {toMonthBlocks(calendar.days).map((block) => (
+                <div key={block.key}>
+                  <h3 className="text-[15px] font-[family-name:var(--font-heading)] mb-2">
+                    {block.label}
+                  </h3>
+
+                  <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                    {WEEKDAYS.map((w, i) => (
+                      <div
+                        key={w}
+                        className={`text-center text-[11px] pb-1 ${
+                          i === 0 ? 'text-[var(--color-status-cancelled)]' : 'text-[var(--color-muted)]'
+                        }`}
+                      >
+                        {w}
+                      </div>
+                    ))}
+
+                    {Array.from({ length: block.leading }, (_, i) => (
+                      <div key={`pad-${i}`} aria-hidden />
+                    ))}
+
+                    {block.cells.map((d) => {
+                      const closed = !d.available;
+                      const chosen = selectedDate === d.date;
+                      const note =
+                        d.status === 'HOLIDAY'
+                          ? 'วันหยุด'
+                          : d.status === 'FULL'
+                            ? 'เต็ม'
+                            : closed
+                              ? 'ปิดรับ'
+                              : d.remainingJobs !== null
+                                ? `เหลือ ${d.remainingJobs}`
+                                : 'ว่าง';
+
+                      return (
+                        <button
+                          key={d.date}
+                          type="button"
+                          disabled={closed || holding}
+                          onClick={() => pickDate(d.date)}
+                          aria-label={`${d.dayOfMonth} ${block.label} — ${note}`}
+                          className={`border rounded-[3px] py-1.5 px-1 text-center transition-colors ${
+                            chosen
+                              ? 'border-[var(--color-brand-orange)] ring-1 ring-[var(--color-brand-orange)] bg-[var(--color-brand-orange-50)]'
+                              : closed
+                                ? 'opacity-40 cursor-not-allowed bg-[var(--color-surface-alt)] border-[var(--color-line)]'
+                                : 'bg-white border-[var(--color-line)] hover:border-[var(--color-brand-orange)] cursor-pointer'
+                          }`}
+                        >
+                          <p className="font-[family-name:var(--font-heading)] text-lg leading-tight">
+                            {d.dayOfMonth}
+                          </p>
+                          <p className="text-[9px] text-[var(--color-muted)] leading-tight">{note}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {holdError && (
@@ -319,7 +415,7 @@ export function BookingWizard({
           <div className="flex items-baseline justify-between gap-2 flex-wrap">
             <h2 className="text-base">3. ข้อมูลผู้ติดต่อ</h2>
             <span className="text-[11px] text-[var(--color-muted)]">
-              นัดวันที่ {selectedDate}
+              นัด{formatThaiFull(selectedDate)}
               {holdExpires && ' · กันคิวไว้ให้ 10 นาที'}
             </span>
           </div>
