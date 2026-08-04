@@ -2,7 +2,12 @@ import { prisma } from '@/lib/db';
 import type { AcType, ServiceCategory } from '@/generated/prisma';
 import { resolvePrice } from '@/modules/catalog/pricing.service';
 import { resolveFeePolicy } from '@/modules/billing/fee.service';
-import { getAvailability, dateOnly, type DayAvailability } from './quota.service';
+import {
+  getAvailability,
+  dateOnly,
+  QUOTA_HORIZON_DAYS,
+  type DayAvailability,
+} from './quota.service';
 
 /**
  * Everything the customer booking page needs to know before it lets someone
@@ -16,7 +21,16 @@ import { getAvailability, dateOnly, type DayAvailability } from './quota.service
 
 /** @client-confirm C6 — minimum lead time assumed 3 days. */
 export const MIN_LEAD_DAYS = 3;
-export const BOOKING_WINDOW_DAYS = 45;
+
+/**
+ * How far ahead a customer may book.
+ *
+ * Matched to QUOTA_HORIZON_DAYS on purpose: the nightly job materialises
+ * buckets exactly that far out, so offering a wider window would show dates
+ * with no bucket behind them, which the calendar can only render as "closed" —
+ * indistinguishable to the customer from a day the office actually shut.
+ */
+export const BOOKING_WINDOW_DAYS = QUOTA_HORIZON_DAYS;
 
 export interface BookingEstimate {
   unitCount: number;

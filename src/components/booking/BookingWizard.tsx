@@ -39,6 +39,11 @@ const TH_MONTHS = [
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
 ];
 
+const TH_MONTHS_SHORT = [
+  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+];
+
 interface DayCell {
   date: string;
   dayOfMonth: number;
@@ -50,9 +55,13 @@ interface DayCell {
 interface MonthBlock {
   key: string;
   label: string;
+  /** Short form for the month tabs, where the full label does not fit. */
+  shortLabel: string;
   /** Empty slots before the first bookable day, so columns line up with real weekdays. */
   leading: number;
   cells: DayCell[];
+  /** Days still bookable — drives the "N วันว่าง" hint on the tab. */
+  openCount: number;
 }
 
 /**
@@ -81,8 +90,10 @@ function toMonthBlocks(
         key,
         // Buddhist Era on every customer-facing surface — @client-confirm A10.
         label: `${TH_MONTHS[month]} ${year + 543}`,
+        shortLabel: `${TH_MONTHS_SHORT[month]} ${String(year + 543).slice(-2)}`,
         leading: date.getUTCDay(),
         cells: [],
+        openCount: 0,
       };
       blocks.set(key, block);
     }
@@ -94,6 +105,7 @@ function toMonthBlocks(
       status: d.status,
       remainingJobs: d.remainingJobs,
     });
+    if (d.available) block.openCount += 1;
   }
 
   return [...blocks.values()];
@@ -147,6 +159,16 @@ export function BookingWizard({
   const [holding, startHold] = useTransition();
 
   const [state, action, pending] = useActionState<ConfirmState, FormData>(confirmBookingAction, {});
+
+  // The booking window spans about three months, which is far too much calendar
+  // to scroll through. Show one month at a time behind tabs.
+  const months = calendar ? toMonthBlocks(calendar.days) : [];
+  const [monthKey, setMonthKey] = useState<string | null>(null);
+
+  // Falls back to the first month rather than pinning a key, so a stale
+  // selection from a previous search cannot leave the grid blank.
+  const activeMonth = months.find((m) => m.key === monthKey) ?? months[0] ?? null;
+  const activeMonthKey = activeMonth?.key ?? null;
 
   // The server already rendered the calendar for the default selection, so
   // fetching it again on mount would blank a calendar that is already correct
@@ -325,11 +347,40 @@ export function BookingWizard({
 
         {!loading && calendar && (
           <>
-            <div className="space-y-5">
-              {toMonthBlocks(calendar.days).map((block) => (
-                <div key={block.key}>
+            <div className="space-y-3">
+              {months.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {months.map((m) => {
+                    const active = m.key === activeMonthKey;
+                    const soldOut = m.openCount === 0;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setMonthKey(m.key)}
+                        aria-pressed={active}
+                        className={`rounded-[3px] border px-3 py-1.5 text-sm transition-colors ${
+                          active
+                            ? 'border-[var(--color-brand-orange)] bg-[var(--color-brand-orange)] text-white'
+                            : soldOut
+                              ? 'border-[var(--color-line)] bg-[var(--color-surface-alt)] text-[var(--color-muted)]'
+                              : 'border-[var(--color-line)] bg-white hover:border-[var(--color-brand-orange)]'
+                        }`}
+                      >
+                        {m.shortLabel}
+                        <span className={`block text-[10px] ${active ? 'text-white/80' : 'text-[var(--color-muted)]'}`}>
+                          {soldOut ? 'เต็ม' : `ว่าง ${m.openCount} วัน`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {activeMonth && (
+                <div key={activeMonth.key}>
                   <h3 className="text-[15px] font-[family-name:var(--font-heading)] mb-2">
-                    {block.label}
+                    {activeMonth.label}
                   </h3>
 
                   <div className="grid grid-cols-7 gap-1 sm:gap-2">
@@ -344,11 +395,11 @@ export function BookingWizard({
                       </div>
                     ))}
 
-                    {Array.from({ length: block.leading }, (_, i) => (
+                    {Array.from({ length: activeMonth.leading }, (_, i) => (
                       <div key={`pad-${i}`} aria-hidden />
                     ))}
 
-                    {block.cells.map((d) => {
+                    {activeMonth.cells.map((d) => {
                       const closed = !d.available;
                       const chosen = selectedDate === d.date;
                       const note =
@@ -368,7 +419,7 @@ export function BookingWizard({
                           type="button"
                           disabled={closed || holding}
                           onClick={() => pickDate(d.date)}
-                          aria-label={`${d.dayOfMonth} ${block.label} — ${note}`}
+                          aria-label={`${d.dayOfMonth} ${activeMonth.label} — ${note}`}
                           className={`border rounded-[3px] py-1.5 px-1 text-center transition-colors ${
                             chosen
                               ? 'border-[var(--color-brand-orange)] ring-1 ring-[var(--color-brand-orange)] bg-[var(--color-brand-orange-50)]'
@@ -386,7 +437,7 @@ export function BookingWizard({
                     })}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
 
             {holdError && (
