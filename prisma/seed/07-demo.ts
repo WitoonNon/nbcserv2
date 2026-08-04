@@ -115,7 +115,7 @@ export async function seedDemo() {
           workDate: d,
           startAt: new Date(d.getTime() + 8 * 3600_000),
           endAt: new Date(d.getTime() + 17 * 3600_000),
-          availableMinutes: 480,
+          availableMinutes: 420,
         },
         update: {},
       });
@@ -267,8 +267,27 @@ export async function seedDemo() {
     }
   }
 
+  // --- keep document sequences ahead of the seeded rows --------------------
+  // The demo customers above use hardcoded codes (CUS-00001..3). Without this
+  // the CUSTOMER counter still reads 0, so the first phone-in intake would
+  // mint CUS-00001 again and fail on the unique constraint.
+  const customers = await prisma.customer.findMany({ select: { code: true } });
+  const highest = customers.reduce((max, c) => {
+    const n = Number(c.code.replace(/\D/g, ''));
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+
+  const seq = await prisma.documentSequence.findUnique({ where: { code: 'CUSTOMER' } });
+  if (seq && seq.currentValue < highest) {
+    await prisma.documentSequence.update({
+      where: { code: 'CUSTOMER' },
+      data: { currentValue: highest },
+    });
+  }
+
   console.log(
     `  demo: ${TECHNICIANS.length} technicians, ${crewPlan.length} crews, ${shiftCount} shifts, ` +
-      `3 customers, ${siteSpecs.length} sites, ${assetCount} assets, 2 contracts`,
+      `3 customers, ${siteSpecs.length} sites, ${assetCount} assets, 2 contracts ` +
+      `(CUSTOMER sequence advanced to ${highest})`,
   );
 }

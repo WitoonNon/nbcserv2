@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { FeePolicyForm, type FeePolicyView } from '@/components/settings/FeePolicyForm';
 import { formatTHB } from '@/lib/utils';
 import { formatThaiDate } from '@/lib/date/buddhist';
+import { requirePermission } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,7 @@ async function load() {
 }
 
 export default async function FeesPage() {
+  await requirePermission('admin.config', '/settings/fees');
   const data = await load();
 
   const view: FeePolicyView | null = data?.policy

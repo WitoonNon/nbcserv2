@@ -1,12 +1,8 @@
-import { randomBytes, scryptSync } from 'node:crypto';
 import { prisma } from './client.js';
-
-/** scrypt is in Node core — no bcrypt dependency needed for the skeleton. */
-export function hashPassword(plain: string): string {
-  const salt = randomBytes(16).toString('hex');
-  const key = scryptSync(plain, salt, 64).toString('hex');
-  return `scrypt$${salt}$${key}`;
-}
+// One hashing implementation only — the seed must produce hashes the login
+// flow can actually verify.
+export { hashPassword } from '../../src/lib/auth/password.js';
+import { hashPassword } from '../../src/lib/auth/password.js';
 
 const ROLES = [
   { code: 'SUPER_ADMIN', nameTh: 'ผู้ดูแลระบบสูงสุด', nameEn: 'Super Admin' },

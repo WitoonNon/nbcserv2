@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@/generated/prisma';
-import type { JobSize, QuotaDayStatus, ServiceCategory } from '@/generated/prisma';
+import type { QuotaDayStatus, ServiceCategory } from '@/generated/prisma';
 
 /**
  * Quota engine (requirement #1).
@@ -17,6 +17,11 @@ import type { JobSize, QuotaDayStatus, ServiceCategory } from '@/generated/prism
  *    QuotaDay bucket. Two customers racing for the last slot serialise on that
  *    row and exactly one wins. A CHECK constraint in the migration is the
  *    second line of defence so a bug can never silently oversell.
+ *
+ * 3. There is ONE bucket per (date, zone, category) — capacity is deliberately
+ *    NOT split by job size. The same crews serve small and large jobs, so a
+ *    per-size split would let a day look available for one size while every
+ *    technician is already committed. Magnitude is carried by units/minutes.
  *
  * 3. Live (unexpired) holds count against capacity, so a slot cannot be sold
  *    from under a customer who is mid-way through the booking form.
@@ -39,11 +44,28 @@ export class QuotaExceededError extends Error {
   }
 }
 
+/**
+ * FULL and CLOSED are deliberately distinct.
+ *
+ * "เต็มแล้ว" (the day sold out) and "ปิดรับงาน" (an admin closed the day) look
+ * the same to the database but mean completely different things to a customer:
+ * one should be offered the next open date, the other is simply not on sale.
+ */
+export type UnavailableReason = 'NO_BUCKET' | 'FULL' | 'CLOSED' | 'HOLIDAY';
+
 export class QuotaUnavailableError extends Error {
-  constructor(readonly reason: 'NO_BUCKET' | 'CLOSED' | 'HOLIDAY') {
+  constructor(readonly reason: UnavailableReason) {
     super(`Slot unavailable: ${reason}`);
     this.name = 'QuotaUnavailableError';
   }
+}
+
+/** True when the caller lost a race for capacity, however it was reported. */
+export function isCapacityRefusal(e: unknown): boolean {
+  return (
+    e instanceof QuotaExceededError ||
+    (e instanceof QuotaUnavailableError && e.reason === 'FULL')
+  );
 }
 
 /** Normalise to UTC midnight so @db.Date round-trips without timezone drift. */
@@ -75,7 +97,6 @@ export interface SlotRequest {
   date: Date;
   zoneId: string;
   category: ServiceCategory;
-  jobSize: JobSize;
   units: number;
   minutes: number;
 }
@@ -85,9 +106,10 @@ export interface SlotRequest {
 // ---------------------------------------------------------------------------
 
 /**
- * Build QuotaDay rows for a date window. Rows are created for every
- * (date x zone x category x size) combination in the horizon; a combination
- * with no matching rule gets NULL capacities, meaning unlimited.
+ * Build QuotaDay rows for a date window: one bucket per
+ * (date x zone x category). A combination with no matching rule is closed
+ * rather than unlimited — an unconfigured category must not silently accept
+ * unbounded bookings.
  *
  * Existing rows are updated in place so consumed counters are never disturbed.
  */
@@ -103,7 +125,6 @@ export async function materialiseQuota(from: Date, to: Date): Promise<number> {
   const holidaySet = new Set(holidays.map((h) => dateOnly(h.date).toISOString()));
 
   const categories: ServiceCategory[] = ['INSPECTION_REPAIR', 'CLEANING_PM', 'REPAIR', 'INSTALLATION'];
-  const sizes: JobSize[] = ['S', 'M', 'L', 'XL'];
 
   let written = 0;
   for (let d = dateOnly(from); d <= dateOnly(to); d = new Date(d.getTime() + 86_400_000)) {
@@ -112,49 +133,40 @@ export async function materialiseQuota(from: Date, to: Date): Promise<number> {
 
     for (const zone of zones) {
       for (const category of categories) {
-        for (const jobSize of sizes) {
-          const rule = rules.find(
-            (r) =>
-              r.category === category &&
-              (r.jobSize === null || r.jobSize === jobSize) &&
-              (r.zoneId === null || r.zoneId === zone.id) &&
-              dateOnly(r.effectiveFrom) <= d &&
-              (r.effectiveTo === null || dateOnly(r.effectiveTo) >= d) &&
-              (r.weekdayMask & weekdayBit) !== 0,
-          );
+        const rule = rules.find(
+          (r) =>
+            r.category === category &&
+            (r.zoneId === null || r.zoneId === zone.id) &&
+            dateOnly(r.effectiveFrom) <= d &&
+            (r.effectiveTo === null || dateOnly(r.effectiveTo) >= d) &&
+            (r.weekdayMask & weekdayBit) !== 0,
+        );
 
-          const status: QuotaDayStatus = isHoliday ? 'HOLIDAY' : !rule ? 'MANUALLY_CLOSED' : 'OPEN';
+        const status: QuotaDayStatus = isHoliday ? 'HOLIDAY' : !rule ? 'MANUALLY_CLOSED' : 'OPEN';
 
-          await prisma.quotaDay.upsert({
-            where: {
-              quotaDate_zoneId_category_jobSize: {
-                quotaDate: d,
-                zoneId: zone.id,
-                category,
-                jobSize,
-              },
-            },
-            create: {
-              quotaDate: d,
-              zoneId: zone.id,
-              category,
-              jobSize,
-              capacityJobs: rule?.maxJobs ?? null,
-              capacityUnits: rule?.maxUnits ?? null,
-              capacityMinutes: rule?.maxTechnicianMinutes ?? null,
-              status,
-            },
-            // Never touch used* counters on re-materialisation. Only a bucket
-            // that has not been manually closed inherits the new status.
-            update: {
-              capacityJobs: rule?.maxJobs ?? null,
-              capacityUnits: rule?.maxUnits ?? null,
-              capacityMinutes: rule?.maxTechnicianMinutes ?? null,
-              ...(isHoliday ? { status: 'HOLIDAY' as const } : {}),
-            },
-          });
-          written += 1;
-        }
+        await prisma.quotaDay.upsert({
+          where: {
+            quotaDate_zoneId_category: { quotaDate: d, zoneId: zone.id, category },
+          },
+          create: {
+            quotaDate: d,
+            zoneId: zone.id,
+            category,
+            capacityJobs: rule?.maxJobs ?? null,
+            capacityUnits: rule?.maxUnits ?? null,
+            capacityMinutes: rule?.maxTechnicianMinutes ?? null,
+            status,
+          },
+          // Never touch used* counters on re-materialisation. Only a bucket
+          // that has not been manually closed inherits the new status.
+          update: {
+            capacityJobs: rule?.maxJobs ?? null,
+            capacityUnits: rule?.maxUnits ?? null,
+            capacityMinutes: rule?.maxTechnicianMinutes ?? null,
+            ...(isHoliday ? { status: 'HOLIDAY' as const } : {}),
+          },
+        });
+        written += 1;
       }
     }
   }
@@ -179,11 +191,10 @@ export async function getAvailability(params: {
   to: Date;
   zoneId: string;
   category: ServiceCategory;
-  jobSize: JobSize;
   requiredUnits?: number;
   requiredMinutes?: number;
 }): Promise<DayAvailability[]> {
-  const { from, to, zoneId, category, jobSize } = params;
+  const { from, to, zoneId, category } = params;
   const requiredUnits = params.requiredUnits ?? 1;
   const requiredMinutes = params.requiredMinutes ?? 0;
 
@@ -205,7 +216,6 @@ export async function getAvailability(params: {
      WHERE q."quotaDate" BETWEEN ${dateOnly(from)}::date AND ${dateOnly(to)}::date
        AND q."zoneId"   = ${zoneId}
        AND q."category" = ${category}::"ServiceCategory"
-       AND q."jobSize"  = ${jobSize}::"JobSize"
      ORDER BY q."quotaDate" ASC
   `;
 
@@ -245,16 +255,16 @@ export async function holdSlot(
 ): Promise<{ holdId: string; expiresAt: Date }> {
   const bucket = await prisma.quotaDay.findUnique({
     where: {
-      quotaDate_zoneId_category_jobSize: {
+      quotaDate_zoneId_category: {
         quotaDate: dateOnly(req.date),
         zoneId: req.zoneId,
         category: req.category,
-        jobSize: req.jobSize,
       },
     },
   });
   if (!bucket) throw new QuotaUnavailableError('NO_BUCKET');
   if (bucket.status === 'HOLIDAY') throw new QuotaUnavailableError('HOLIDAY');
+  if (bucket.status === 'FULL') throw new QuotaUnavailableError('FULL');
   if (bucket.status !== 'OPEN') throw new QuotaUnavailableError('CLOSED');
 
   const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
@@ -314,13 +324,15 @@ export async function bookSlot(req: SlotRequest, sessionKey?: string): Promise<B
          WHERE q."quotaDate" = ${dateOnly(req.date)}::date
            AND q."zoneId"    = ${req.zoneId}
            AND q."category"  = ${req.category}::"ServiceCategory"
-           AND q."jobSize"   = ${req.jobSize}::"JobSize"
          FOR UPDATE
       `;
 
       const bucket = rows[0];
       if (!bucket) throw new QuotaUnavailableError('NO_BUCKET');
       if (bucket.status === 'HOLIDAY') throw new QuotaUnavailableError('HOLIDAY');
+      // Losing the race to a booking that filled the day is a capacity refusal,
+      // not an administrative closure — the customer should be offered another date.
+      if (bucket.status === 'FULL') throw new QuotaUnavailableError('FULL');
       if (bucket.status !== 'OPEN') throw new QuotaUnavailableError('CLOSED');
 
       // 2. Count live holds belonging to *other* sessions.

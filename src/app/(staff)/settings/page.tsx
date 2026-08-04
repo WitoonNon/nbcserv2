@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
+import { requirePermission } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,7 @@ async function loadCounts() {
 }
 
 export default async function SettingsPage() {
+  await requirePermission('admin.config', '/settings');
   const counts = await loadCounts();
 
   const CARDS = [

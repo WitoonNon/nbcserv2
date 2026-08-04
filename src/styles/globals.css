@@ -99,6 +99,53 @@
   a[role='button'] {
     touch-action: manipulation;
   }
+
+}
+
+/* --- Form validation ---------------------------------------------------
+   Deliberately OUTSIDE @layer: unlayered rules win over Tailwind's utility
+   layer, so `border-[var(--color-line)]` on the input cannot override the
+   error state. Inside @layer base these rules silently lost the cascade.
+
+   :user-invalid, not :invalid — a required field must not glow red the
+   instant the page loads, only once the person has touched it or tried to
+   submit. */
+input:user-invalid,
+select:user-invalid,
+textarea:user-invalid {
+  border-color: var(--color-status-cancelled);
+  background-color: #fef2f2;
+}
+
+input:user-invalid:focus,
+select:user-invalid:focus,
+textarea:user-invalid:focus {
+  outline: none;
+  border-color: var(--color-status-cancelled);
+  box-shadow: 0 0 0 1px var(--color-status-cancelled);
+}
+
+/* Field flagged by the server after submit (client validation cannot catch
+   everything, e.g. a duplicate customer code). */
+[data-invalid='true'] {
+  border-color: var(--color-status-cancelled);
+  background-color: #fef2f2;
+}
+
+/* Inline message shown only while its field is invalid. It is a following
+   sibling of the input, so no JavaScript is involved — this keeps working
+   even when the technician PWA is running from cache offline. */
+.field-hint {
+  display: none;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--color-status-cancelled);
+}
+
+input:user-invalid ~ .field-hint,
+select:user-invalid ~ .field-hint,
+textarea:user-invalid ~ .field-hint {
+  display: block;
 }
 
 @layer components {

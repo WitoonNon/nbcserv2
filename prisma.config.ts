@@ -12,6 +12,9 @@ export default defineConfig({
   // Multi-file schema: one .prisma file per domain module.
   schema: path.join('prisma', 'schema'),
   migrations: {
+    // With a multi-file schema folder, Prisma 7 defaults the migrations path
+    // next to the schema. Point it at the real directory explicitly.
+    path: path.join('prisma', 'migrations'),
     seed: 'tsx prisma/seed/index.ts',
   },
   datasource: {

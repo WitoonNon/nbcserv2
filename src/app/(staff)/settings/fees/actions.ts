@@ -3,10 +3,15 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
 import type { CreditMode } from '@/generated/prisma';
+import { assertPermission, ForbiddenError } from '@/lib/auth/guard';
 
 export interface FeeState {
   error?: string;
   ok?: string;
+}
+
+function authError(e: unknown): FeeState | null {
+  return e instanceof ForbiddenError ? { error: e.message } : null;
 }
 
 /**
@@ -15,6 +20,14 @@ export interface FeeState {
  * the policy that actually applied to them, so historical jobs stay explicable.
  */
 export async function saveFeePolicyAction(_prev: FeeState, formData: FormData): Promise<FeeState> {
+  let actorId: string;
+  try {
+    actorId = (await assertPermission('admin.config')).id;
+  } catch (e) {
+    return authError(e) ?? { error: 'ตรวจสอบสิทธิ์ไม่สำเร็จ' };
+  }
+  void actorId;
+
   const id = String(formData.get('id') ?? '');
   const amount = Number(formData.get('amount'));
   const creditMode = String(formData.get('creditMode') ?? 'FULL') as CreditMode;
@@ -83,6 +96,12 @@ export async function saveFeePolicyAction(_prev: FeeState, formData: FormData): 
 }
 
 export async function saveApprovalPolicyAction(_prev: FeeState, formData: FormData): Promise<FeeState> {
+  try {
+    await assertPermission('admin.config');
+  } catch (e) {
+    return authError(e) ?? { error: 'ตรวจสอบสิทธิ์ไม่สำเร็จ' };
+  }
+
   const maxAmount = Number(formData.get('maxAmountForTechnician'));
   if (!Number.isFinite(maxAmount) || maxAmount < 0) return { error: 'วงเงินไม่ถูกต้อง' };
 

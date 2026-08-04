@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatThaiDate } from '@/lib/date/buddhist';
 import { formatMinutes } from '@/lib/utils';
+import { requireUser } from '@/lib/auth/guard';
+import { dateOnly } from '@/modules/scheduling/quota.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +14,29 @@ export const dynamic = 'force-dynamic';
  * Everything is a large tap target — this is used one-handed, often with
  * gloves on, sometimes in direct sunlight on a rooftop.
  */
-async function loadQueue() {
+/**
+ * Only the jobs assigned to THIS technician's crew. A technician opening the
+ * app must never see the whole company's day — it is both noise and a
+ * disclosure of other customers' details.
+ */
+async function loadQueue(technicianId: string | null) {
+  if (!technicianId) return [];
   try {
-    const today = new Date(new Date().toDateString());
+    // dateOnly() normalises to UTC midnight, which is how @db.Date columns are
+    // stored. Using local midnight in Bangkok (UTC+7) resolves to 17:00 the
+    // previous day and silently matches nothing — the technician sees an empty
+    // queue while jobs are in fact assigned to them.
+    const today = dateOnly(new Date());
     return await prisma.job.findMany({
-      where: { scheduledDate: today },
+      where: {
+        scheduledDate: today,
+        assignments: {
+          some: {
+            unassignedAt: null,
+            crew: { members: { some: { technicianId, validTo: null } } },
+          },
+        },
+      },
       include: { customer: true, site: true, assets: true },
       orderBy: [{ priority: 'desc' }, { scheduledWindowFrom: 'asc' }],
       take: 20,
@@ -27,7 +47,8 @@ async function loadQueue() {
 }
 
 export default async function TechTodayPage() {
-  const jobs = await loadQueue();
+  const user = await requireUser('/t/today');
+  const jobs = await loadQueue(user.technicianId);
 
   return (
     <div className="p-4 space-y-4">

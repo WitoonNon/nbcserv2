@@ -209,7 +209,7 @@ export async function assignJob(params: {
   });
 }
 
-export async function unassignJob(jobId: string, actorId?: string | null): Promise<void> {
+export async function unassignJob(jobId: string, actorId: string | null = null): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.jobAssignment.updateMany({
       where: { jobId, unassignedAt: null },

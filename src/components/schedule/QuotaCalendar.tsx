@@ -122,32 +122,33 @@ export function QuotaCalendar({
             <button onClick={() => setSelected(null)} className="text-sm text-[var(--color-muted)]">ปิด</button>
           </div>
 
-          <div className="overflow-x-auto mt-2">
-            <table className="w-full text-sm min-w-[520px]">
-              <thead>
-                <tr className="text-left text-xs text-[var(--color-muted)] border-b border-[var(--color-line)]">
-                  <th className="py-1.5 font-normal">ขนาดงาน</th>
-                  <th className="py-1.5 font-normal">สถานะ</th>
-                  <th className="py-1.5 font-normal text-right">งาน</th>
-                  <th className="py-1.5 font-normal text-right">เวลาช่าง</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selected.sizes.map((s) => (
-                  <tr key={s.jobSize} className="border-b border-[var(--color-line)] last:border-0">
-                    <td className="py-1.5">{s.jobSize}</td>
-                    <td className="py-1.5 text-xs">{STATUS_STYLE[s.status]?.label ?? s.status}</td>
-                    <td className="py-1.5 text-right font-mono text-xs">
-                      {s.usedJobs}/{s.capacityJobs ?? '∞'}
-                    </td>
-                    <td className="py-1.5 text-right font-mono text-xs">
-                      {formatMinutes(s.usedMinutes)} / {s.capacityMinutes ? formatMinutes(s.capacityMinutes) : '∞'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid gap-3 sm:grid-cols-3 mt-2">
+            <div>
+              <p className="text-[11px] text-[var(--color-muted)]">จำนวนงาน</p>
+              <p className="font-mono text-sm">
+                {selected.usedJobs} / {selected.capacityJobs ?? '∞'}
+              </p>
+              <Bar used={selected.usedJobs} capacity={selected.capacityJobs} />
+            </div>
+            <div>
+              <p className="text-[11px] text-[var(--color-muted)]">จำนวนเครื่อง</p>
+              <p className="font-mono text-sm">
+                {selected.usedUnits} / {selected.capacityUnits ?? '∞'}
+              </p>
+              <Bar used={selected.usedUnits} capacity={selected.capacityUnits} />
+            </div>
+            <div>
+              <p className="text-[11px] text-[var(--color-muted)]">เวลาทีมช่าง</p>
+              <p className="font-mono text-sm">
+                {formatMinutes(selected.usedMinutes)} /{' '}
+                {selected.capacityMinutes ? formatMinutes(selected.capacityMinutes) : '∞'}
+              </p>
+              <Bar used={selected.usedMinutes} capacity={selected.capacityMinutes} />
+            </div>
           </div>
+          <p className="text-[11px] text-[var(--color-muted)] mt-2">
+            สถานะ: {STATUS_STYLE[selected.status]?.label ?? selected.status} · วันจะปิดรับอัตโนมัติเมื่อแกนใดแกนหนึ่งเต็ม
+          </p>
 
           {selected.status !== 'HOLIDAY' && (
             <form action={action} className="mt-3 flex flex-wrap gap-2 items-end border-t border-[var(--color-line)] pt-3">

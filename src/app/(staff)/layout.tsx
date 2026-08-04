@@ -1,24 +1,33 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/Logo';
+import { UserMenu } from '@/components/auth/UserMenu';
+import { requireUser } from '@/lib/auth/guard';
 
 /**
  * Staff console shell — admin, dispatcher and supervisor. Desktop-first:
  * this is used at a desk with a dispatch board open all day.
+ *
+ * The nav is filtered by permission, so a dispatcher never sees a Settings
+ * link they cannot open. Each page still enforces its own permission — this
+ * only keeps the navigation honest.
  */
 
 const NAV = [
-  { href: '/dashboard', label: 'ภาพรวม', en: 'Dashboard' },
-  { href: '/jobs', label: 'งานทั้งหมด', en: 'Jobs' },
-  { href: '/dispatch', label: 'จ่ายงาน', en: 'Dispatch' },
-  { href: '/schedule', label: 'ตารางงาน', en: 'Schedule' },
-  { href: '/customers', label: 'ลูกค้า', en: 'Customers' },
-  { href: '/assets', label: 'ทะเบียนเครื่อง', en: 'Assets' },
-  { href: '/work-orders', label: 'ใบงาน', en: 'Work orders' },
-  { href: '/reports', label: 'รายงาน', en: 'Reports' },
-  { href: '/settings', label: 'ตั้งค่า', en: 'Settings' },
+  { href: '/dashboard', label: 'ภาพรวม', en: 'Dashboard', perm: 'job.read' },
+  { href: '/jobs', label: 'งานทั้งหมด', en: 'Jobs', perm: 'job.read' },
+  { href: '/dispatch', label: 'จ่ายงาน', en: 'Dispatch', perm: 'dispatch.read' },
+  { href: '/schedule', label: 'ตารางงาน', en: 'Schedule', perm: 'quota.read' },
+  { href: '/customers', label: 'ลูกค้า', en: 'Customers', perm: 'customer.read' },
+  { href: '/assets', label: 'ทะเบียนเครื่อง', en: 'Assets', perm: 'customer.read' },
+  { href: '/work-orders', label: 'ใบงาน', en: 'Work orders', perm: 'workorder.read' },
+  { href: '/reports', label: 'รายงาน', en: 'Reports', perm: 'report.read' },
+  { href: '/settings', label: 'ตั้งค่า', en: 'Settings', perm: 'admin.config' },
 ];
 
-export default function StaffLayout({ children }: { children: React.ReactNode }) {
+export default async function StaffLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireUser();
+  const items = NAV.filter((n) => user.permissions.has(n.perm));
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="brand-gradient text-white shadow-sm">
@@ -26,19 +35,14 @@ export default function StaffLayout({ children }: { children: React.ReactNode })
           <Link href="/dashboard" className="flex items-center">
             <Logo height={30} />
           </Link>
-          <div className="flex items-center gap-3 text-xs">
-            <span className="hidden md:inline text-white/70">ผู้ดูแลระบบ</span>
-            <span className="size-8 rounded-full bg-white/20 grid place-items-center text-[11px] font-semibold">
-              NB
-            </span>
-          </div>
+          <UserMenu name={user.name} roles={user.roles} />
         </div>
       </header>
 
       <div className="flex flex-1 w-full">
         <nav className="hidden lg:block w-52 shrink-0 border-r border-[var(--color-line)] bg-white">
           <ul className="py-3">
-            {NAV.map((item) => (
+            {items.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}

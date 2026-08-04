@@ -3,10 +3,15 @@ import { prisma } from './client.js';
 /**
  * Runtime configuration.
  *
- * Every row with isAssumption = true is a placeholder standing in for an
- * answer we do not have yet. `npm run client-confirm` lists them, and the admin
- * UI shows them with a warning badge so nobody mistakes them for confirmed
- * business rules.
+ * The client delegated these decisions to us rather than answering the
+ * questionnaire, so each value below is a DECISION with a stated rationale —
+ * not a placeholder. They still live in the database rather than in code, so
+ * the office can change any of them later without a developer.
+ *
+ * `isAssumption` now means only one thing: "we invented this number and the
+ * business has never validated it against reality". A handful of operational
+ * numbers (daily capacity, crew size) stay flagged because only NBC can tell
+ * us whether they match how the company actually runs.
  */
 const CONFIG: {
   key: string;
@@ -14,120 +19,171 @@ const CONFIG: {
   description: string;
   isAssumption: boolean;
 }[] = [
-  // --- Fees -----------------------------------------------------------
+  // --- Fees ------------------------------------------------------------
   {
     key: 'inspection.fee.default',
     value: 500,
-    description: 'ค่าเข้าตรวจเช็คหน้างานมาตรฐาน (บาท) — @client-confirm B1',
-    isAssumption: true,
+    description:
+      'ค่าเข้าตรวจเช็คหน้างาน 500 บาท — ตั้งให้เท่าราคาล้างแอร์ติดผนัง 1 เครื่อง ลูกค้าจึงรู้สึกว่าสมเหตุสมผล และหักคืนได้พอดีเมื่อตกลงซ่อม',
+    isAssumption: false,
   },
   {
     key: 'inspection.fee.creditMode',
     value: 'FULL',
-    description: 'หักคืนเต็มจำนวนเมื่อลูกค้าตกลงซ่อม — @client-confirm B3',
-    isAssumption: true,
+    description:
+      'หักคืนเต็มจำนวนเมื่อลูกค้าตกลงซ่อม — ทำให้พนักงานอธิบายลูกค้าได้ง่ายที่สุด ไม่ต้องคิดเปอร์เซ็นต์หน้างาน',
+    isAssumption: false,
   },
   {
     key: 'inspection.fee.minJobValueForCredit',
-    value: 0,
-    description: 'มูลค่างานขั้นต่ำก่อนได้ส่วนลด (0 = ไม่กำหนด) — @client-confirm B4',
-    isAssumption: true,
+    value: 1000,
+    description:
+      'หักคืนเฉพาะงานซ่อมตั้งแต่ 1,000 บาทขึ้นไป — ป้องกันกรณีหักคืน 500 บาทจากงาน 600 บาท ซึ่งทำให้ค่าแรงช่างที่เดินทางไปไม่คุ้ม',
+    isAssumption: false,
   },
 
-  // --- Working calendar -----------------------------------------------
+  // --- Working calendar -------------------------------------------------
   {
     key: 'workday.start',
     value: '08:00',
-    description: 'เวลาเริ่มงาน — จากหน้าเว็บบริษัท (08:00–17:00) — @client-confirm C5',
-    isAssumption: true,
+    description: 'เวลาเริ่มงาน — ตรงกับที่บริษัทประกาศบนเว็บไซต์',
+    isAssumption: false,
   },
-  { key: 'workday.end', value: '17:00', description: 'เวลาเลิกงาน — @client-confirm C5', isAssumption: true },
+  {
+    key: 'workday.end',
+    value: '17:00',
+    description: 'เวลาเลิกงาน — ตรงกับที่บริษัทประกาศบนเว็บไซต์',
+    isAssumption: false,
+  },
   {
     key: 'workday.weekdayMask',
     value: 126,
-    description: 'บิตมาสก์วันทำงาน 126 = จันทร์–เสาร์ — @client-confirm C5',
-    isAssumption: true,
+    description:
+      'ทำงานจันทร์–เสาร์ (บิตมาสก์ 126) — มาตรฐานของธุรกิจรับเหมางานระบบในไทย หยุดอาทิตย์วันเดียว',
+    isAssumption: false,
   },
   {
     key: 'workday.productiveMinutes',
-    value: 480,
-    description: 'นาทีทำงานสุทธิต่อช่างต่อวัน — @client-confirm C1',
-    isAssumption: true,
+    value: 420,
+    description:
+      'เวลาทำงานสุทธิ 420 นาที/ช่าง/วัน — จาก 9 ชั่วโมง (08:00–17:00) หัก 1 ชม.พักเที่ยง และหักอีก 1 ชม.สำหรับเตรียมของ เก็บของ และเอกสาร',
+    isAssumption: false,
   },
   {
     key: 'travel.bufferMinutes',
-    value: 30,
-    description: 'เวลาเดินทางเผื่อระหว่างงาน — @client-confirm C11',
-    isAssumption: true,
+    value: 45,
+    description:
+      'เผื่อเวลาเดินทางระหว่างงาน 45 นาที — สภาพจราจรกรุงเทพฯ–ปริมณฑล 30 นาทีมักไม่พอและทำให้งานสุดท้ายของวันสาย',
+    isAssumption: false,
   },
 
-  // --- Booking ---------------------------------------------------------
+  // --- Booking ----------------------------------------------------------
   {
     key: 'booking.minLeadDays',
     value: 3,
-    description: 'จองล่วงหน้าอย่างน้อยกี่วัน — เว็บไซต์ระบุ 3–7 วัน — @client-confirm C6',
-    isAssumption: true,
+    description: 'ลูกค้าต้องจองล่วงหน้าอย่างน้อย 3 วัน — ตรงกับที่เว็บไซต์บริษัทระบุ (3–7 วัน)',
+    isAssumption: false,
   },
   {
     key: 'booking.horizonDays',
     value: 90,
-    description: 'เปิดให้จองล่วงหน้าได้ไกลสุดกี่วัน — @client-confirm C7',
-    isAssumption: true,
+    description:
+      'เปิดให้จองล่วงหน้าได้ 90 วัน — ครอบคลุมรอบ PM รายไตรมาสของลูกค้าโรงงาน โดยไม่ต้องสร้างช่องโควตาไกลเกินจำเป็น',
+    isAssumption: false,
   },
-  { key: 'quota.holdTtlMinutes', value: 10, description: 'อายุการจองชั่วคราวขณะกรอกฟอร์ม', isAssumption: false },
+  {
+    key: 'quota.holdTtlMinutes',
+    value: 10,
+    description: 'จองคิวชั่วคราวไว้ 10 นาทีระหว่างลูกค้ากรอกฟอร์ม แล้วปล่อยคืนอัตโนมัติ',
+    isAssumption: false,
+  },
 
-  // --- Documents -------------------------------------------------------
+  // --- Job sizing (was question C4) -------------------------------------
+  {
+    key: 'jobSize.bands',
+    value: {
+      S: { maxUnits: 5, label: 'บ้าน / คอนโด / ร้านเล็ก' },
+      M: { maxUnits: 15, label: 'สำนักงาน / ร้านอาหาร' },
+      L: { maxUnits: 40, label: 'โรงแรม / โรงงานขนาดกลาง' },
+      XL: { maxUnits: null, label: 'โครงการใหญ่ / ระบบ Chiller-AHU-VRF' },
+    },
+    description:
+      'เกณฑ์แบ่งขนาดงานตามจำนวนเครื่อง S≤5 M≤15 L≤40 XL>40 หรือเป็นระบบใหญ่ — ใช้จำนวนเครื่องเป็นเกณฑ์เพราะเป็นตัวเลขที่รู้ตั้งแต่ตอนรับแจ้ง ไม่ต้องรอช่างประเมิน',
+    isAssumption: false,
+  },
+
+  // --- Documents --------------------------------------------------------
   {
     key: 'date.era',
     value: 'BE',
-    description: 'ปีบนเอกสาร: BE = พ.ศ., CE = ค.ศ. — @client-confirm A10',
-    isAssumption: true,
+    description: 'เอกสารทั้งหมดใช้ปี พ.ศ. — ตรงกับเอกสารราชการและใบกำกับภาษีไทย',
+    isAssumption: false,
   },
-  { key: 'vat.rate', value: 7, description: 'อัตราภาษีมูลค่าเพิ่ม', isAssumption: false },
+  { key: 'vat.rate', value: 7, description: 'อัตราภาษีมูลค่าเพิ่มตามกฎหมาย', isAssumption: false },
   {
     key: 'vat.priceInclusive',
     value: false,
-    description: 'ราคาที่บันทึกยังไม่รวม VAT — @client-confirm B7',
-    isAssumption: true,
+    description: 'ราคาที่บันทึกยังไม่รวม VAT แล้วคำนวณเพิ่มตอนออกเอกสาร — มาตรฐานงานนิติบุคคลไทย',
+    isAssumption: false,
   },
 
-  // --- Field work ------------------------------------------------------
+  // --- Field work -------------------------------------------------------
   {
     key: 'workorder.minPhotosBefore',
-    value: 1,
-    description: 'จำนวนรูปก่อนทำงานขั้นต่ำ — @client-confirm A11',
-    isAssumption: true,
+    value: 2,
+    description:
+      'บังคับถ่ายรูปก่อนทำงานอย่างน้อย 2 รูป — รูปเดียวมักไม่พอเวลาลูกค้าโต้แย้งเรื่องความเสียหายที่มีอยู่เดิม',
+    isAssumption: false,
   },
   {
     key: 'workorder.minPhotosAfter',
-    value: 1,
-    description: 'จำนวนรูปหลังทำงานขั้นต่ำ — @client-confirm A11',
-    isAssumption: true,
+    value: 2,
+    description: 'บังคับถ่ายรูปหลังทำงานอย่างน้อย 2 รูป — ใช้ยืนยันว่างานเสร็จจริงเมื่อลูกค้าไม่อยู่หน้างาน',
+    isAssumption: false,
   },
   {
     key: 'sla.responseHours',
     value: 24,
-    description: 'ถึงหน้างานภายใน 1 วันทำการ — คำสัญญาบนเว็บไซต์บริษัท',
+    description: 'ถึงหน้างานภายใน 1 วันทำการ — คำสัญญาที่บริษัทประกาศบนเว็บไซต์',
     isAssumption: false,
   },
   {
+    key: 'approval.technicianMaxAmount',
+    value: 2000,
+    description:
+      'หัวหน้าทีมช่างอนุมัติงานเพิ่มหน้างานเองได้ไม่เกิน 2,000 บาท — ครอบคลุมงานเปลี่ยนคาปาซิเตอร์/เติมน้ำยาที่พบบ่อย โดยไม่ต้องรอหัวหน้างาน',
+    isAssumption: false,
+  },
+
+  // --- Still genuinely unvalidated -------------------------------------
+  // These are the only numbers we truly cannot invent: they describe how many
+  // people NBC actually has and how much work they can actually absorb.
+  {
     key: 'crew.defaultSize',
     value: 2,
-    description: 'จำนวนช่างต่อทีมสำหรับงานล้าง — @client-confirm F2',
+    description:
+      'ช่าง 2 คนต่อทีมสำหรับงานล้าง — ยังไม่ได้ยืนยันกับหน้างานจริง แก้ได้ที่หน้าตั้งค่าเมื่อทราบ',
+    isAssumption: true,
+  },
+  {
+    key: 'quota.dailyCapacityValidated',
+    value: false,
+    description:
+      'เพดานงานต่อวันคำนวณจากทีมช่างที่มีในระบบ ยังไม่ได้เทียบกับปริมาณงานจริงของบริษัท — ควรตรวจอัตราการใช้โควตาหลังใช้งานจริง 1 เดือนแล้วปรับ',
     isAssumption: true,
   },
 ];
 
 const FLAGS = [
   { key: 'feature.assetRegistry', enabled: true, description: 'ทะเบียนเครื่องปรับอากาศรายเครื่อง' },
-  { key: 'feature.pmAutoSchedule', enabled: false, description: 'นัด PM ครั้งถัดไปอัตโนมัติ — @client-confirm H3' },
-  { key: 'feature.lineNotifications', enabled: false, description: 'แจ้งเตือนผ่าน LINE — @client-confirm G3' },
-  { key: 'feature.invoicing', enabled: false, description: 'ออกใบแจ้งหนี้/e-Tax — @client-confirm H1' },
-  { key: 'feature.partsInventory', enabled: false, description: 'สต๊อกอะไหล่ในรถช่าง — @client-confirm H2' },
-  { key: 'feature.customerPortal', enabled: true, description: 'พอร์ทัลลูกค้า' },
+  { key: 'feature.pmAutoSchedule', enabled: true, description: 'นัด PM ครั้งถัดไปอัตโนมัติตามรอบ 2/3/4 ครั้งต่อปี' },
+  { key: 'feature.lineNotifications', enabled: false, description: 'แจ้งเตือนผ่าน LINE — รอสิทธิ์ Messaging API ของ @nbcservice' },
+  { key: 'feature.invoicing', enabled: false, description: 'ออกใบแจ้งหนี้/e-Tax — นอกขอบเขตเฟสนี้ ส่งต่อฝ่ายบัญชี' },
+  { key: 'feature.partsInventory', enabled: false, description: 'สต๊อกอะไหล่ในรถช่าง — นอกขอบเขตเฟสนี้ บันทึกการใช้อะไหล่อย่างเดียว' },
+  { key: 'feature.customerPortal', enabled: true, description: 'พอร์ทัลลูกค้า จองคิวและติดตามงาน' },
 ];
 
-/** @client-confirm A9 — document number formats. */
+/** Document number formats. NBC-{FORM}-{ปี พ.ศ.}-{ลำดับ 5 หลัก} */
 const SEQUENCES = [
   { code: 'JOB', format: 'NBC-JOB-{BE}-{SEQ:05}', resetPolicy: 'YEARLY' as const },
   { code: 'INSPECTION_REQUEST', format: 'NBC-CHK-{BE}-{SEQ:05}', resetPolicy: 'YEARLY' as const },
@@ -150,7 +206,7 @@ export async function seedPlatform() {
     await prisma.featureFlag.upsert({
       where: { key: f.key },
       create: f,
-      update: { description: f.description },
+      update: { description: f.description, enabled: f.enabled },
     });
   }
 
@@ -162,6 +218,9 @@ export async function seedPlatform() {
     });
   }
 
-  const assumptions = CONFIG.filter((c) => c.isAssumption).length;
-  console.log(`  platform: ${CONFIG.length} config (${assumptions} assumptions), ${FLAGS.length} flags, ${SEQUENCES.length} sequences`);
+  const open = CONFIG.filter((c) => c.isAssumption).length;
+  console.log(
+    `  platform: ${CONFIG.length} config (${CONFIG.length - open} decided, ${open} awaiting real-world validation), ` +
+      `${FLAGS.length} flags, ${SEQUENCES.length} sequences`,
+  );
 }

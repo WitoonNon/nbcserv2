@@ -42,10 +42,15 @@ model QuotaRule {
 
   zoneId   String?
   category ServiceCategory
-  jobSize  JobSize?
 
   /// All three limits are nullable — NULL means "unlimited on this axis".
-  /// @client-confirm C1/C2 — the client picks which axes they actually want.
+  ///
+  /// Note there is deliberately no jobSize dimension. The same crews do small
+  /// and large jobs, so splitting capacity by size would let a day read "full"
+  /// for one size while another still shows free slots even though every
+  /// technician is already booked. Job magnitude is already expressed by
+  /// maxUnits and maxTechnicianMinutes — a 40-unit factory PM consumes 40
+  /// units and 1,200 minutes, which is exactly the right way to say "big".
   maxJobs              Int?
   maxUnits             Int?
   maxTechnicianMinutes Int?
@@ -70,7 +75,6 @@ model QuotaDay {
   quotaDate DateTime        @db.Date
   zoneId    String
   category  ServiceCategory
-  jobSize   JobSize
 
   capacityJobs    Int?
   capacityUnits   Int?
@@ -89,7 +93,7 @@ model QuotaDay {
   holds     QuotaHold[]
   overrides QuotaOverrideLog[]
 
-  @@unique([quotaDate, zoneId, category, jobSize])
+  @@unique([quotaDate, zoneId, category])
   @@index([quotaDate, status])
   @@map("quota_days")
 }

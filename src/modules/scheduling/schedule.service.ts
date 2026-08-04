@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import type { JobSize, QuotaDayStatus, ServiceCategory } from '@/generated/prisma';
+import type { QuotaDayStatus, ServiceCategory } from '@/generated/prisma';
 import { dateOnly } from './quota.service';
 
 /**
@@ -10,26 +10,17 @@ import { dateOnly } from './quota.service';
  * customer can book.
  */
 
-export interface CalendarSize {
-  jobSize: JobSize;
-  quotaDayId: string;
-  status: QuotaDayStatus;
-  capacityJobs: number | null;
-  capacityMinutes: number | null;
-  usedJobs: number;
-  usedMinutes: number;
-}
-
 export interface CalendarDay {
   date: string;
+  quotaDayId: string;
   isHoliday: boolean;
   holidayName?: string;
-  sizes: CalendarSize[];
   usedJobs: number;
   capacityJobs: number | null;
+  usedUnits: number;
+  capacityUnits: number | null;
   usedMinutes: number;
   capacityMinutes: number | null;
-  /** OPEN unless every size bucket is closed/full. */
   status: QuotaDayStatus;
 }
 
@@ -49,7 +40,7 @@ export async function getMonthCalendar(params: {
         category: params.category,
         quotaDate: { gte: from, lte: to },
       },
-      orderBy: [{ quotaDate: 'asc' }, { jobSize: 'asc' }],
+      orderBy: { quotaDate: 'asc' },
     }),
     prisma.holiday.findMany({ where: { date: { gte: from, lte: to } } }),
   ]);
@@ -58,47 +49,22 @@ export async function getMonthCalendar(params: {
     holidays.map((h) => [dateOnly(h.date).toISOString().slice(0, 10), h.nameTh]),
   );
 
-  const byDate = new Map<string, CalendarDay>();
-  for (const d of days) {
+  return days.map((d) => {
     const iso = dateOnly(d.quotaDate).toISOString().slice(0, 10);
-    let entry = byDate.get(iso);
-    if (!entry) {
-      entry = {
-        date: iso,
-        isHoliday: holidayByIso.has(iso),
-        holidayName: holidayByIso.get(iso),
-        sizes: [],
-        usedJobs: 0,
-        capacityJobs: null,
-        usedMinutes: 0,
-        capacityMinutes: null,
-        status: 'OPEN',
-      };
-      byDate.set(iso, entry);
-    }
-    entry.sizes.push({
-      jobSize: d.jobSize,
+    return {
+      date: iso,
       quotaDayId: d.id,
-      status: d.status,
-      capacityJobs: d.capacityJobs,
-      capacityMinutes: d.capacityMinutes,
+      isHoliday: holidayByIso.has(iso),
+      holidayName: holidayByIso.get(iso),
       usedJobs: d.usedJobs,
+      capacityJobs: d.capacityJobs,
+      usedUnits: d.usedUnits,
+      capacityUnits: d.capacityUnits,
       usedMinutes: d.usedMinutes,
-    });
-    entry.usedJobs += d.usedJobs;
-    entry.usedMinutes += d.usedMinutes;
-    if (d.capacityJobs !== null) entry.capacityJobs = (entry.capacityJobs ?? 0) + d.capacityJobs;
-    if (d.capacityMinutes !== null) entry.capacityMinutes = (entry.capacityMinutes ?? 0) + d.capacityMinutes;
-  }
-
-  for (const entry of byDate.values()) {
-    if (entry.sizes.every((s) => s.status === 'HOLIDAY')) entry.status = 'HOLIDAY';
-    else if (entry.sizes.every((s) => s.status === 'MANUALLY_CLOSED')) entry.status = 'MANUALLY_CLOSED';
-    else if (entry.sizes.every((s) => s.status !== 'OPEN')) entry.status = 'FULL';
-    else entry.status = 'OPEN';
-  }
-
-  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+      capacityMinutes: d.capacityMinutes,
+      status: d.status,
+    };
+  });
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { assignJob, SkillGateError, unassignJob } from '@/modules/dispatch/dispatch.service';
+import { assertPermission, ForbiddenError } from '@/lib/auth/guard';
 
 export interface DispatchState {
   error?: string;
@@ -10,6 +11,7 @@ export interface DispatchState {
 }
 
 function friendly(e: unknown): string {
+  if (e instanceof ForbiddenError) return e.message;
   const msg = e instanceof Error ? e.message : String(e);
   if (/closed the connection|ECONNREFUSED|does not exist|P1001/i.test(msg)) {
     return 'ยังเชื่อมต่อฐานข้อมูลไม่ได้ — จ่ายงานได้ทันทีเมื่อตั้งค่า DATABASE_URL แล้วรัน migrate + seed';
@@ -24,7 +26,8 @@ export async function assignAction(_prev: DispatchState, formData: FormData): Pr
   if (!jobId || !crewId) return { error: 'กรุณาเลือกงานและทีมช่าง' };
 
   try {
-    await assignJob({ jobId, crewId, force });
+    const actor = await assertPermission('dispatch.assign');
+    await assignJob({ jobId, crewId, force, actorId: actor.id });
   } catch (e) {
     if (e instanceof SkillGateError) {
       return { confirmSkillOverride: { jobId, crewId, missing: e.missing } };
@@ -39,7 +42,8 @@ export async function assignAction(_prev: DispatchState, formData: FormData): Pr
 export async function unassignAction(_prev: DispatchState, formData: FormData): Promise<DispatchState> {
   const jobId = String(formData.get('jobId') ?? '');
   try {
-    await unassignJob(jobId);
+    const actor = await assertPermission('dispatch.assign');
+    await unassignJob(jobId, actor.id);
   } catch (e) {
     return { error: friendly(e) };
   }

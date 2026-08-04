@@ -18,17 +18,29 @@ const ZONES = [
 ];
 
 /**
- * @client-confirm C1/C2 — daily caps.
+ * Daily caps — our design, since the client delegated the decision.
  *
- * Sized for an assumed 3 crews x 2 technicians x 480 productive minutes.
- * All three axes are active so the client can see how they interact; setting
- * any of them to NULL makes that axis unlimited.
+ * IMPORTANT — what the minute axis measures:
+ * `maxTechnicianMinutes` holds **crew-minutes**, i.e. elapsed time of the
+ * assigned crew, because the published service durations (30/40/60/90 min per
+ * unit) are elapsed times for a crew, not per-person effort.
+ *
+ * Total daily capacity = 3 crews x 420 productive minutes = 1,260 crew-minutes.
+ * The four categories share those same crews, so their caps are a SPLIT of
+ * that total, not four independent full allowances — otherwise the calendar
+ * would happily sell four times the company's real capacity.
+ *
+ *   cleaning/PM 840  +  repair 280  +  inspection 140  =  1,260
+ *
+ * Installation is capped by job count only; those jobs are quoted and
+ * scheduled by hand rather than booked online.
  */
 const QUOTA_RULES: {
   name: string;
   category: ServiceCategory;
   maxJobs: number | null;
   maxUnits: number | null;
+  /** crew-minutes — see the note above */
   maxMinutes: number | null;
   priority: number;
 }[] = [
@@ -37,7 +49,7 @@ const QUOTA_RULES: {
     category: 'CLEANING_PM',
     maxJobs: 8,
     maxUnits: 40,
-    maxMinutes: 1440, // 3 crews x 480 min
+    maxMinutes: 840, // 2 ทีมเต็มวัน
     priority: 10,
   },
   {
@@ -45,23 +57,23 @@ const QUOTA_RULES: {
     category: 'REPAIR',
     maxJobs: 4,
     maxUnits: 8,
-    maxMinutes: 480,
+    maxMinutes: 280,
     priority: 10,
   },
   {
     name: 'โควตางานตรวจเช็ค/แจ้งซ่อมรายวัน',
     category: 'INSPECTION_REPAIR',
-    maxJobs: 4,
-    maxUnits: 8,
-    maxMinutes: 240,
+    maxJobs: 3,
+    maxUnits: 6,
+    maxMinutes: 140,
     priority: 10,
   },
   {
-    name: 'โควตางานติดตั้งรายวัน',
+    name: 'โควตางานติดตั้งรายวัน (นัดด้วยมือ)',
     category: 'INSTALLATION',
     maxJobs: 2,
     maxUnits: 4,
-    maxMinutes: 480,
+    maxMinutes: null,
     priority: 10,
   },
 ];
@@ -111,7 +123,6 @@ export async function seedScheduling() {
       weekdayMask: 126, // Mon–Sat
       zoneId: zone.id,
       category: r.category,
-      jobSize: null,
       maxJobs: r.maxJobs,
       maxUnits: r.maxUnits,
       maxTechnicianMinutes: r.maxMinutes,

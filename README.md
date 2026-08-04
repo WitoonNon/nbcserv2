@@ -1,67 +1,94 @@
-# NBC Group — Repair & Service Management
+# NBC Service — ระบบบริหารงานซ่อมและบริการ
 
-Operational system of record for **บริษัท เอ็นบีซี กรุ๊ป จำกัด** (NBC Group Co., Ltd.):
-intake → quota-controlled booking → dispatch → on-site digital work order with photos and
-signatures → PDF → history → analytics.
+ระบบบริหารงานซ่อม ล้างแอร์ และบำรุงรักษา สำหรับ **บริษัท เอ็นบีซี กรุ๊ป จำกัด**
+ครอบคลุมตั้งแต่รับแจ้งงาน → จองคิวตามโควตา → จ่ายงานช่าง → ใบงานหน้างานพร้อมรูปและลายเซ็น → PDF → ประวัติ → รายงาน
 
-Sits **beside** the existing marketing site at [nbcgroup.co.th](https://nbcgroup.co.th) (WordPress
-+ Elementor), reusing its branding but not its runtime.
+ระบบนี้ทำงาน **แยกจากเว็บไซต์เดิม** [nbcgroup.co.th](https://nbcgroup.co.th) (WordPress) โดยใช้แบรนด์เดียวกัน
+แต่ไม่แตะโค้ดเว็บเดิม — เว็บเดิมยังเป็นหน้าร้านสำหรับการตลาดเหมือนเดิม
 
-> **Status: Phase 0 skeleton.** The client's operational data has not arrived yet. Every
-> unconfirmed value is a **database row**, never a hardcoded constant — run
-> `npm run client-confirm` to list them all.
+> **สถานะ:** Phase 0 เสร็จ · Phase 1 ประมาณ 85% · Phase 2 ยังไม่เริ่ม
+> ต่อฐานข้อมูล Supabase จริงแล้ว เทสต์ผ่าน 7/7
 
 ---
 
-## Quick start
+## สรุปสั้น ทำถึงไหนแล้ว
+
+| ส่วน | สถานะ |
+|---|---|
+| ฐานข้อมูล 52 ตาราง 27 enum + migration 3 ชุด | ✅ ใช้งานจริงบน Supabase |
+| ระบบโควตารายวัน (3 แกน + กันจองซ้ำ) | ✅ ทดสอบ concurrency ผ่าน |
+| ค่าเข้าตรวจเช็ค + หักคืนเป็นส่วนลด | ✅ |
+| ระบบล็อกอิน + สิทธิ์ตามบทบาท | ✅ ทดสอบ 11 กรณีผ่าน |
+| รับแจ้งงาน / รายการงาน / รายละเอียดงาน | ✅ |
+| กระดานจ่ายงาน + มาตรวัดกำลังทีม | ✅ |
+| ปฏิทินโควตา + เปิด-ปิดวัน | ✅ |
+| ทะเบียนลูกค้า + Customer 360 | ✅ |
+| ตั้งค่าระบบ (ผู้ใช้ ราคา ค่าธรรมเนียม ฟอร์ม) | ✅ |
+| ใบซ่อม ตรงตามฟอร์มจริงของบริษัท | ✅ แสดงผลได้ ยังบันทึกไม่ได้ |
+| หน้าจองคิวฝั่งลูกค้า | 🟡 ดูวันว่างได้ ยังจองจริงไม่ได้ |
+| แอปช่างบนมือถือ | 🟡 เห็นงานตัวเอง ยังกรอกใบงานไม่ได้ |
+| ทะเบียนเครื่องปรับอากาศ / รายงานสถิติ | ❌ ยังไม่ทำ |
+| ถ่ายรูป · ลายเซ็น · PDF · ออฟไลน์ | ❌ ยังไม่ทำ (Phase 2) |
+| แจ้งเตือน LINE | ❌ รอสิทธิ์ Messaging API |
+
+---
+
+## เริ่มใช้งาน
 
 ```bash
 npm install
-cp .env.example .env        # then set DATABASE_URL
+cp .env.example .env          # แล้วใส่ DATABASE_URL
 npx prisma generate
 npx prisma migrate deploy
 npm run db:seed
 npm run dev
 ```
 
-### Database
+เปิด http://localhost:3000
 
-PostgreSQL 16+ is required (17/18 are fine). Either:
+### บัญชีทดสอบ — รหัสเดียวกันหมด `nbc-dev-1234`
 
-- **Docker** — `npm run db:up` starts Postgres + Redis + MinIO from `docker-compose.yml`
-- **Native install** — create a dedicated role and database:
+| อีเมล | บทบาท | เห็นอะไร |
+|---|---|---|
+| `admin@nbcgroup.co.th` | ผู้ดูแลระบบสูงสุด | ทุกเมนู |
+| `office@nbcgroup.co.th` | ธุรการ | รับแจ้งงาน ลูกค้า ไม่มีตั้งค่า |
+| `dispatch@nbcgroup.co.th` | ผู้จ่ายงาน | จ่ายงาน โควตา ไม่มีตั้งค่า |
+| `supervisor@nbcgroup.co.th` | หัวหน้างาน | อนุมัติใบงานและใบเสนอราคา |
+| `tech-001@` … `tech-006@` | ช่าง | เข้าแอปช่างอัตโนมัติ เห็นเฉพาะงานทีมตัวเอง |
 
-  ```sql
-  CREATE ROLE nbc WITH LOGIN PASSWORD 'nbc';
-  CREATE DATABASE nbc_service OWNER nbc;
-  ```
+### คำสั่งที่ใช้บ่อย
 
-  then set `DATABASE_URL="postgresql://nbc:nbc@localhost:5432/nbc_service?schema=public"`
+| คำสั่ง | ทำอะไร |
+|---|---|
+| `npm run db:check` | เช็คว่าต่อ DB ได้ และรองรับ `SELECT FOR UPDATE` |
+| `npm run db:seed` | ใส่ข้อมูลตั้งต้น (รันซ้ำได้ ไม่พัง) |
+| `node scripts/demo-day.mjs` | สร้างงานตัวอย่างของวันนี้ สำหรับเดโม |
+| `npm test` | เทสต์ระบบโควตา (ต้องมี DB) |
+| `npm run client-confirm` | ดูรายการค่าที่ยังรอลูกค้ายืนยัน |
 
 ---
 
-## Architecture
+## สถาปัตยกรรม
 
-| Layer | Choice | Note |
+| ชั้น | เทคโนโลยี | เหตุผล |
 |---|---|---|
-| Frontend | Next.js 16 (App Router), React 19, TypeScript strict | one codebase, three surfaces |
-| Styling | Tailwind v4, CSS-first tokens | palette sampled from the live site |
-| Fonts | Mitr (headings) + Sarabun (body/tables/PDF), **self-hosted** | no CDN dependency — the technician app must work offline |
-| Database | PostgreSQL + Prisma 7 (`@prisma/adapter-pg`) | transactional quota locking, JSONB form payloads |
-| Storage | `StorageAdapter` port — `local` ⇄ `s3`/R2 | hosting decision is an env var |
-| Notifications | `NotificationChannel` port — `console` ⇄ LINE ⇄ email | LINE credentials do not block development |
-| i18n | next-intl, `th` default + `en` | real i18n from day one |
+| หน้าเว็บ | Next.js 16 (App Router), React 19, TypeScript | โค้ดชุดเดียวรองรับ 3 หน้าจอ |
+| ดีไซน์ | Tailwind v4 + โทเคนสีจากเว็บบริษัท | สีส้ม `#E4750E` น้ำเงิน `#2891BD` กรมท่า `#132945` |
+| ฟอนต์ | Mitr (หัวข้อ) + Sarabun (เนื้อหา) **โฮสต์เอง** | แอปช่างต้องทำงานตอนไม่มีเน็ต |
+| ฐานข้อมูล | PostgreSQL 17 (Supabase, สิงคโปร์) + Prisma 7 | ล็อกแถวได้จริง เก็บฟอร์มเป็น JSONB |
+| ล็อกอิน | Session ในฐานข้อมูล + cookie httpOnly | เพิกถอนสิทธิ์ได้ทันที |
+| ไฟล์แนบ | `StorageAdapter` (local ⇄ S3/R2) | ยังไม่ต้องตัดสินใจเรื่อง hosting |
+| แจ้งเตือน | `NotificationChannel` (console ⇄ LINE ⇄ email) | ยังไม่มีสิทธิ์ LINE ก็พัฒนาต่อได้ |
 
-### Three surfaces
+### 3 หน้าจอ
 
-- `src/app/(staff)` — admin, dispatcher, supervisor. Desktop-first.
-- `src/app/(tech)` — technician PWA. Mobile-first, offline-first, large tap targets.
-- `src/app/(portal)` — customer booking and tracking. Visually continuous with the main site.
+- `src/app/(staff)` — ออฟฟิศ ธุรการ ผู้จ่ายงาน หัวหน้างาน (จอคอมพิวเตอร์)
+- `src/app/(tech)` — ช่างภาคสนาม (มือถือ ปุ่มใหญ่ ออกแบบเผื่อไม่มีสัญญาณ)
+- `src/app/(portal)` — ลูกค้า จองคิวและติดตามงาน
 
-### Modules
+### โครงสร้างโมดูล
 
-Modular monolith. `prisma/schema/*.prisma` and `src/modules/*` mirror each other 1:1.
-Modules talk through **services**, never by reaching into another module's tables.
+`prisma/schema/*.prisma` กับ `src/modules/*` จับคู่กัน 1:1
 
 ```
 identity  customers  contracts  catalog  scheduling  jobs
@@ -70,94 +97,125 @@ dispatch  workorders billing    media    notifications platform
 
 ---
 
-## The three things worth reading first
+## 3 จุดที่ควรอ่านก่อน
 
-### 1. Quota engine — `src/modules/scheduling/quota.service.ts`
+### 1. ระบบโควตา — `src/modules/scheduling/quota.service.ts`
 
-Capacity is tracked on **three axes**: jobs, units and technician-minutes. NBC publishes
-per-unit service times of 30/40/60/90 minutes, so "10 jobs per day" is meaningless — ten
-90-minute concealed units is a completely different day from ten 30-minute wall units.
-A `NULL` capacity means unlimited on that axis.
+คุมกำลังรับงาน **3 แกนพร้อมกัน**: จำนวนงาน · จำนวนเครื่อง · **นาทีทีมช่าง**
 
-`bookSlot()` takes a row-level lock (`SELECT ... FOR UPDATE`) on exactly one `QuotaDay`
-bucket, so two customers racing for the last slot serialise and exactly one wins.
-`prisma/migrations/*_guards/migration.sql` adds `CHECK` constraints as the second line of
-defence: a bug cannot silently oversell, Postgres refuses the write.
+แกนที่สามสำคัญที่สุด เพราะเว็บบริษัทประกาศเวลาทำงานต่อเครื่องไว้ 30/40/60/90 นาที
+การกำหนดว่า "วันละ 10 งาน" จึงไม่มีความหมาย — งานล้างแอร์ติดผนัง 10 เครื่อง กับงานแอร์ซ่อนในฝ้า 10 เครื่อง
+กินกำลังช่างต่างกันสามเท่า
 
-### 2. Fee ledger — `src/modules/billing/fee.service.ts`
+**หนึ่งช่องต่อ (วัน × เขต × ประเภทงาน)** ไม่แยกตามขนาดงาน เพราะช่างทีมเดียวกันทำทั้งงานเล็กงานใหญ่
+ถ้าแยกช่องตามขนาด วันหนึ่งอาจขึ้นว่า "ยังว่าง" สำหรับงานเล็ก ทั้งที่ช่างถูกจองหมดแล้ว
 
-The inspection fee is an **append-only charge ledger**, never a mutable number on the job.
+การจองใช้ `SELECT ... FOR UPDATE` ล็อกแถวเดียว ลูกค้าสองคนแย่งคิวสุดท้ายพร้อมกันจะสำเร็จแค่คนเดียว
+และมี `CHECK constraint` ในฐานข้อมูลเป็นด่านสอง — ต่อให้โค้ดมีบั๊ก Postgres ก็ไม่ยอมให้รับงานเกิน
 
-| Event | Ledger effect |
+### 2. ค่าเข้าตรวจเช็ค — `src/modules/billing/fee.service.ts`
+
+เก็บเป็น **บัญชีเดินสะพัด เขียนเพิ่มอย่างเดียว** ไม่ใช่ตัวเลขที่แก้ทับได้
+
+| เหตุการณ์ | สิ่งที่บันทึก |
 |---|---|
-| Job created, non-contract customer | `+INSPECTION_FEE` |
-| Job created, **contract** customer | no row; `Job.feeWaivedReason = CONTRACT` |
-| Customer declines the repair | fee stands, invoiced |
-| Customer approves the repair | `+INSPECTION_FEE_CREDIT` (negative) |
+| รับงาน ลูกค้าทั่วไป | `+ค่าตรวจเช็ค` |
+| รับงาน ลูกค้าในสัญญา | **ไม่บันทึกเลย** ระบุเหตุผลว่ายกเว้นตามสัญญา |
+| ลูกค้าไม่ซ่อมต่อ | ค่าตรวจเช็คคงอยู่ ออกบิลตามนั้น |
+| ลูกค้าตกลงซ่อม | `+ส่วนลด` (ค่าติดลบ) |
 
-Net payable is always `SUM(amountSigned)` — reproducible, and never wrong because someone
-edited a field.
+ยอดสุทธิคำนวณจาก `SUM(amountSigned)` เสมอ — ตรวจย้อนหลังได้ และไม่มีทางผิดเพราะมีคนแก้ตัวเลข
 
-### 3. Form engine — `src/lib/forms/`
+### 3. แบบฟอร์มใบงาน — `src/lib/forms/`
 
-The three work-order forms are **data, not code**. A `FormTemplate` row holds a schema, the
-renderer walks it, and a zod validator is derived from it. `templateVersion` is stored on
-every work order, so a 2026 PDF still renders exactly as issued after the form changes in
-2027 — the most commonly omitted field in systems of this type.
+ฟอร์มทั้ง 3 ใบเก็บเป็น **ข้อมูลในฐานข้อมูล ไม่ใช่โค้ด** เมื่อลูกค้าส่งฟอร์มจริงมาก็เพิ่มเป็นเวอร์ชันใหม่ได้ทันที
 
-`Signature.payloadHash` is a SHA-256 of the payload at the moment of signing. That is the
-difference between a picture of a signature and evidence.
+`templateVersion` ถูกบันทึกไว้บนใบงานแต่ละใบ — ใบงานที่ออกปี 2569 จะยังแสดงผลแบบเดิมเสมอ
+แม้ฟอร์มจะเปลี่ยนไปแล้วในปี 2570
 
----
-
-## Seed data is real, not lorem ipsum
-
-`prisma/seed/03-catalog.ts` is NBC's **own published price list** — both tiers (contract vs
-non-contract), all AC types and BTU bands, and the published service durations. The PM
-frequency tiers (2×/3×/4× per year by usage profile) come from their site too.
-
-The skeleton is therefore demoable to the client on day one, and every placeholder is a
-number they will recognise as their own.
+`Signature.payloadHash` เก็บ SHA-256 ของเนื้อหาตอนที่เซ็น ถ้ามีการแก้ไขภายหลังจะตรวจจับได้
+— นี่คือความต่างระหว่าง "รูปลายเซ็น" กับ "หลักฐาน"
 
 ---
 
-## Open client questions
+## ข้อมูลตั้งต้นเป็นข้อมูลจริง
+
+`prisma/seed/03-catalog.ts` คือ **ตารางราคาที่บริษัทประกาศบนเว็บไซต์จริง** — ราคา 2 ระดับ
+(ลูกค้าในสัญญา / ลูกค้าทั่วไป) ครบทุกประเภทเครื่องและช่วง BTU พร้อมเวลาทำงานมาตรฐาน
+รวมถึงรอบ PM 2/3/4 ครั้งต่อปีตามลักษณะการใช้งาน
+
+ระบบจึงเดโมให้ลูกค้าดูได้ตั้งแต่วันแรก และตัวเลขที่เห็นเป็นตัวเลขที่ลูกค้าคุ้นเคย
+
+---
+
+## ยังขาดอะไร
+
+### 🔴 ต้องมีก่อนใช้งานจริง
+
+1. **จองคิวหน้าเว็บให้จบ** — ปฏิทินแสดงวันว่างได้แล้ว แต่กดเลือกวันยังไม่สร้างงานจริง
+   (service พร้อมหมดแล้ว เหลือต่อ UI) และยังไม่มีหน้า `/track` ติดตามงาน
+2. **ส่วนช่างภาคสนาม (Phase 2)** — งานหนักที่สุดที่เหลือ
+   - บันทึกใบงานลงฐานข้อมูล (ตอนนี้แสดงฟอร์มได้ แต่ปุ่มบันทึกยังปิด)
+   - อัปโหลดรูป — `StorageAdapter` ยังเป็น stub แนะนำใช้ Supabase Storage
+   - ลายเซ็นบน canvas จริง
+   - **ออก PDF ภาษาไทย** (พิสูจน์เทคนิคแล้วด้วย Chromium + Sarabun)
+   - ทำงานออฟไลน์แล้ว sync
+3. **ขึ้นเซิร์ฟเวอร์จริง** — Vercel + โดเมน `app.nbcgroup.co.th`
+   ⚠️ **ต้องเปลี่ยนรหัสฐานข้อมูลก่อน** รหัสปัจจุบันเคยส่งผ่านแชท ไม่ควรใช้เป็นรหัส production
+
+### 🟡 ควรมีก่อนเปิดตัว
+
+4. หน้า **ทะเบียนเครื่องปรับอากาศ** และ **รายงานสถิติ** — ยังเป็นหน้าเปล่าบอกขอบเขต
+5. **แจ้งเตือน LINE** — รอสิทธิ์ Messaging API ของ `@nbcservice`
+6. **งานเบื้องหลัง** — กวาดคิวจองที่หมดอายุ, สร้างช่องโควตารายวัน, นัด PM อัตโนมัติ
+7. **บังคับเปลี่ยนรหัสผ่านครั้งแรก** และย้ายตัวจำกัดการล็อกอินผิดไป Redis
+   (ตอนนี้เก็บใน memory หายเมื่อรีสตาร์ท)
+8. **สำรองข้อมูล + Monitoring** — Supabase แผนฟรีไม่มี backup อัตโนมัติ
+
+### ⏳ รอลูกค้า (ไม่บล็อกงานข้างบน)
+
+- **ฟอร์มจริงอีก 2 ใบ** — ใบตรวจเช็ค/แจ้งซ่อม และใบล้าง/PM
+  (ได้ใบซ่อมมาแล้ว ทำตรงต้นฉบับเรียบร้อย)
+- **โลโก้ไฟล์เวกเตอร์** — ที่ใช้อยู่เป็น PNG ความละเอียดต่ำจากเว็บ พิมพ์ลงเอกสารแล้วไม่คมชัด
+- ตารางราคาฉบับที่ใช้จริงภายใน · รายการอะไหล่จริง
+- สิทธิ์ LINE OA · สิทธิ์จัดการ DNS
+- **วันหยุดนักขัตฤกษ์แบบจันทรคติ** (มาฆบูชา วิสาขบูชา อาสาฬหบูชา เข้าพรรษา)
+  — ระบบใส่เฉพาะวันหยุดที่วันที่ตายตัว ไม่เดาวันจันทรคติ เพราะใส่ผิดจะปิดรับงานในวันทำงานโดยไม่มีใครรู้
+
+---
+
+## การทดสอบ
 
 ```bash
-npm run client-confirm
+npm test
 ```
 
-Lists every `@client-confirm` marker across schema, seed, services and docs, grouped by
-question number. The live version is also at `/settings/assumptions` in the app.
+**7 เทสต์ ผ่านทั้งหมด** รันกับ PostgreSQL จริง ไม่ใช่ mock เพราะสิ่งที่ทดสอบคือการล็อกแถวของฐานข้อมูล
 
-Full questionnaire: [`docs/02-CLIENT-DATA-CHECKLIST.md`](docs/02-CLIENT-DATA-CHECKLIST.md)
-(bilingual, plus a printable PDF).
-
-**The three that actually block progress:** the three paper forms (A1–A3), the inspection
-fee rule (B1–B5), and daily capacity by job type (C1–C5).
+ข้อที่สำคัญที่สุด: **จอง 20 รายการพร้อมกันแย่งคิวสุดท้าย ต้องสำเร็จ 1 รายการเท่านั้น**
+การขายคิวเกินคือความผิดพลาดที่ทำให้ระบบนี้เสียหายที่สุด และทดสอบด้วย mock ไม่ได้
 
 ---
 
-## Scripts
+## เอกสารประกอบ
 
-| Command | What it does |
+| ไฟล์ | เนื้อหา |
 |---|---|
-| `npm run dev` | dev server |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run db:migrate` | create/apply a migration |
-| `npm run db:seed` | idempotent seed (safe to re-run) |
-| `npm run db:reset` | drop, migrate, seed |
-| `npm run db:studio` | Prisma Studio |
-| `npm test` | vitest (quota concurrency tests need a live database) |
-| `npm run client-confirm` | list open client questions |
+| `docs/00-SYSTEM-BLUEPRINT.md` | วิเคราะห์ธุรกิจ สถาปัตยกรรม เหตุผลการออกแบบฐานข้อมูล |
+| `docs/01-BUILD-PLAN-SKELETON.md` | แผนการพัฒนาและทะเบียนค่าสมมติ |
+| `docs/02-CLIENT-DATA-CHECKLIST.md` | แบบสอบถามข้อมูลจากลูกค้า (ไทย-อังกฤษ) |
+| `docs/NBC-REQ-001-Client-Data-Checklist-TH.pdf` | ฉบับ PDF สำหรับส่งลูกค้า |
 
 ---
 
-## Docs
+## ข้อควรรู้สำหรับผู้พัฒนาต่อ
 
-| File | Contents |
-|---|---|
-| `docs/00-SYSTEM-BLUEPRINT.md` | business analysis, architecture, schema rationale |
-| `docs/01-BUILD-PLAN-SKELETON.md` | build plan + assumptions register |
-| `docs/02-CLIENT-DATA-CHECKLIST.md` | bilingual client questionnaire |
-| `docs/NBC-REQ-001-Client-Data-Checklist-TH.pdf` | printable Thai version |
+- **ค่าที่ลูกค้ายังไม่ยืนยัน เก็บเป็นข้อมูลในฐานข้อมูล ไม่ฝังในโค้ด** — ดูตาราง `AppConfig`
+  และหน้า `/settings/assumptions` แก้ได้โดยไม่ต้องแก้โปรแกรม
+- **ชื่อตารางเป็น snake_case แต่ชื่อคอลัมน์เป็น camelCase** (ค่าเริ่มต้นของ Prisma)
+  เวลาเขียน SQL ดิบต้องใส่ `"เครื่องหมายคำพูด"` ครอบชื่อคอลัมน์เสมอ
+- **คอลัมน์ `@db.Date` เก็บเป็นเที่ยงคืน UTC** ต้องใช้ `dateOnly()` เทียบเสมอ
+  ถ้าใช้เที่ยงคืนเวลาไทยจะเลื่อนไปวันก่อนหน้าและหาไม่เจอ (เคยเป็นบั๊กจริงในแอปช่าง)
+- **`middleware.ts` รันบน Edge runtime** ห้าม import อะไรที่ใช้ `node:crypto` หรือ Prisma
+  ค่าคงที่ที่ใช้ร่วมกันอยู่ใน `src/lib/auth/constants.ts`
+- **CSS ที่ต้องชนะ utility ของ Tailwind ต้องอยู่นอก `@layer`** เช่นกฎขอบแดงของฟอร์ม

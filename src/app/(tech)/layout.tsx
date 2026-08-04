@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { requireUser } from '@/lib/auth/guard';
+import { redirect } from 'next/navigation';
 
 /**
  * Technician PWA shell — mobile-first, offline-first.
@@ -15,14 +17,24 @@ const TABS = [
   { href: '/t/profile', label: 'โปรไฟล์', icon: '👤' },
 ];
 
-export default function TechLayout({ children }: { children: React.ReactNode }) {
+export default async function TechLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireUser('/t/today');
+
+  // Office staff opening a technician URL by mistake get sent somewhere useful
+  // rather than an empty queue that looks broken.
+  if (!user.technicianId && !user.permissions.has('workorder.submit')) {
+    redirect('/dashboard');
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <header className="brand-gradient text-white sticky top-0 z-20">
-        <div className="px-4 h-12 flex items-center justify-between">
-          <span className="font-[family-name:var(--font-heading)] text-sm">NBC ช่าง</span>
+        <div className="px-4 h-12 flex items-center justify-between gap-2">
+          <span className="font-[family-name:var(--font-heading)] text-sm truncate">
+            {user.name}
+          </span>
           {/* Replaced by a live connectivity indicator once the sync queue lands. */}
-          <span className="text-[11px] bg-white/20 rounded-full px-2 py-0.5">ออนไลน์</span>
+          <span className="text-[11px] bg-white/20 rounded-full px-2 py-0.5 shrink-0">ออนไลน์</span>
         </div>
       </header>
 

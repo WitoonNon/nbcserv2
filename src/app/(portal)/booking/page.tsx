@@ -25,7 +25,6 @@ async function loadCalendar() {
       to,
       zoneId: zone.id,
       category: 'CLEANING_PM',
-      jobSize: 'S',
       requiredUnits: 1,
       requiredMinutes: 30,
     });

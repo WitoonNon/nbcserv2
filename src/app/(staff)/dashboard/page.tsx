@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { formatTHB } from '@/lib/utils';
 import { formatThaiDate } from '@/lib/date/buddhist';
+import { dateOnly } from '@/modules/scheduling/quota.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,9 @@ async function loadStats(): Promise<Stats | null> {
       prisma.part.count(),
       prisma.quotaDay.count({ where: { status: 'OPEN' } }),
       prisma.appConfig.count({ where: { isAssumption: true } }),
-      prisma.job.count({ where: { scheduledDate: new Date(new Date().toDateString()) } }),
+      // UTC midnight — @db.Date columns are stored that way; local midnight in
+      // Bangkok would land on the previous day and always count zero.
+      prisma.job.count({ where: { scheduledDate: dateOnly(new Date()) } }),
     ]);
     return { customers, sites, assets, technicians, crews, services, parts, openQuotaDays, assumptions, jobsToday };
   } catch {

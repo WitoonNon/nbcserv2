@@ -35,10 +35,22 @@ export default function NewJobPage() {
         <label className="block">
           <span className="block text-[13px] mb-1">ชื่อลูกค้า <span className="text-red-600">*</span></span>
           <input name="customerName" required className={inputCls} />
+          <span className="field-hint">กรุณากรอกชื่อลูกค้า</span>
         </label>
         <label className="block">
           <span className="block text-[13px] mb-1">เบอร์โทร <span className="text-red-600">*</span></span>
-          <input name="phone" required className={inputCls} placeholder="08x-xxx-xxxx" />
+          <input
+            name="phone"
+            required
+            inputMode="tel"
+            /* Parentheses MUST be escaped: browsers compile `pattern` with the
+               regex `v` flag, and a pattern that fails to compile is silently
+               ignored — the field then accepts anything. */
+            pattern="[0-9\-\s+\(\)]{8,20}"
+            className={inputCls}
+            placeholder="08x-xxx-xxxx"
+          />
+          <span className="field-hint">กรุณากรอกเบอร์โทรให้ถูกต้อง (ตัวเลข 8–20 หลัก)</span>
         </label>
 
         <label className="block sm:col-span-2">
