@@ -309,89 +309,103 @@ export interface BookResult {
  *                   consumed (deleted) rather than counted against capacity.
  */
 export async function bookSlot(req: SlotRequest, sessionKey?: string): Promise<BookResult> {
-  return prisma.$transaction(
-    async (tx) => {
-      // 1. Lock exactly one bucket row. Contenders for this date+category+size
-      //    serialise here; everyone else is unaffected.
-      const rows = await tx.$queryRaw<BucketRow[]>`
-        SELECT q."id",
-               q."quotaDate",
-               q."capacityJobs", q."capacityUnits", q."capacityMinutes",
-               q."usedJobs", q."usedUnits", q."usedMinutes",
-               q."status",
-               0::bigint AS "heldUnits", 0::bigint AS "heldMinutes"
-          FROM "quota_days" q
-         WHERE q."quotaDate" = ${dateOnly(req.date)}::date
-           AND q."zoneId"    = ${req.zoneId}
-           AND q."category"  = ${req.category}::"ServiceCategory"
-         FOR UPDATE
-      `;
+  return prisma.$transaction((tx) => bookSlotWithin(tx, req, sessionKey), {
+    isolationLevel: 'ReadCommitted',
+    timeout: 15_000,
+  });
+}
 
-      const bucket = rows[0];
-      if (!bucket) throw new QuotaUnavailableError('NO_BUCKET');
-      if (bucket.status === 'HOLIDAY') throw new QuotaUnavailableError('HOLIDAY');
-      // Losing the race to a booking that filled the day is a capacity refusal,
-      // not an administrative closure — the customer should be offered another date.
-      if (bucket.status === 'FULL') throw new QuotaUnavailableError('FULL');
-      if (bucket.status !== 'OPEN') throw new QuotaUnavailableError('CLOSED');
+/**
+ * The consume itself, for callers that already own a transaction.
+ *
+ * Booking must commit atomically with whatever it is booking FOR — a job row
+ * that fails to insert after capacity was consumed would leak a slot that no
+ * customer holds. Prisma cannot nest `$transaction`, so composition happens
+ * here rather than by calling bookSlot() from inside another transaction.
+ */
+export async function bookSlotWithin(
+  tx: Prisma.TransactionClient,
+  req: SlotRequest,
+  sessionKey?: string,
+): Promise<BookResult> {
+  // 1. Lock exactly one bucket row. Contenders for this date+category+size
+  //    serialise here; everyone else is unaffected.
+  const rows = await tx.$queryRaw<BucketRow[]>`
+    SELECT q."id",
+           q."quotaDate",
+           q."capacityJobs", q."capacityUnits", q."capacityMinutes",
+           q."usedJobs", q."usedUnits", q."usedMinutes",
+           q."status",
+           0::bigint AS "heldUnits", 0::bigint AS "heldMinutes"
+      FROM "quota_days" q
+     WHERE q."quotaDate" = ${dateOnly(req.date)}::date
+       AND q."zoneId"    = ${req.zoneId}
+       AND q."category"  = ${req.category}::"ServiceCategory"
+     FOR UPDATE
+  `;
 
-      // 2. Count live holds belonging to *other* sessions.
-      const heldRows = await tx.$queryRaw<{ units: bigint | null; minutes: bigint | null }[]>`
-        SELECT SUM("units") AS "units", SUM("minutes") AS "minutes"
-          FROM "quota_holds"
-         WHERE "quotaDayId" = ${bucket.id}
-           AND "expiresAt" > NOW()
-           ${sessionKey ? Prisma.sql`AND "sessionKey" <> ${sessionKey}` : Prisma.empty}
-      `;
-      const heldUnits = Number(heldRows[0]?.units ?? 0);
-      const heldMinutes = Number(heldRows[0]?.minutes ?? 0);
+  const bucket = rows[0];
+  if (!bucket) throw new QuotaUnavailableError('NO_BUCKET');
+  if (bucket.status === 'HOLIDAY') throw new QuotaUnavailableError('HOLIDAY');
+  // Losing the race to a booking that filled the day is a capacity refusal,
+  // not an administrative closure — the customer should be offered another date.
+  if (bucket.status === 'FULL') throw new QuotaUnavailableError('FULL');
+  if (bucket.status !== 'OPEN') throw new QuotaUnavailableError('CLOSED');
 
-      // 3. Check every configured axis.
-      const dateLabel = dateOnly(req.date).toISOString().slice(0, 10);
-      if (bucket.capacityJobs !== null && bucket.usedJobs + 1 > bucket.capacityJobs) {
-        throw new QuotaExceededError('jobs', dateLabel);
-      }
-      if (
-        bucket.capacityUnits !== null &&
-        bucket.usedUnits + heldUnits + req.units > bucket.capacityUnits
-      ) {
-        throw new QuotaExceededError('units', dateLabel);
-      }
-      if (
-        bucket.capacityMinutes !== null &&
-        bucket.usedMinutes + heldMinutes + req.minutes > bucket.capacityMinutes
-      ) {
-        throw new QuotaExceededError('minutes', dateLabel);
-      }
+  // 2. Count live holds belonging to *other* sessions.
+  const heldRows = await tx.$queryRaw<{ units: bigint | null; minutes: bigint | null }[]>`
+    SELECT SUM("units") AS "units", SUM("minutes") AS "minutes"
+      FROM "quota_holds"
+     WHERE "quotaDayId" = ${bucket.id}
+       AND "expiresAt" > NOW()
+       ${sessionKey ? Prisma.sql`AND "sessionKey" <> ${sessionKey}` : Prisma.empty}
+  `;
+  const heldUnits = Number(heldRows[0]?.units ?? 0);
+  const heldMinutes = Number(heldRows[0]?.minutes ?? 0);
 
-      // 4. Consume, and close the day if any axis is now exhausted.
-      const usedJobs = bucket.usedJobs + 1;
-      const usedUnits = bucket.usedUnits + req.units;
-      const usedMinutes = bucket.usedMinutes + req.minutes;
-      const becameFull =
-        (bucket.capacityJobs !== null && usedJobs >= bucket.capacityJobs) ||
-        (bucket.capacityUnits !== null && usedUnits >= bucket.capacityUnits) ||
-        (bucket.capacityMinutes !== null && usedMinutes >= bucket.capacityMinutes);
+  // 3. Check every configured axis.
+  const dateLabel = dateOnly(req.date).toISOString().slice(0, 10);
+  if (bucket.capacityJobs !== null && bucket.usedJobs + 1 > bucket.capacityJobs) {
+    throw new QuotaExceededError('jobs', dateLabel);
+  }
+  if (
+    bucket.capacityUnits !== null &&
+    bucket.usedUnits + heldUnits + req.units > bucket.capacityUnits
+  ) {
+    throw new QuotaExceededError('units', dateLabel);
+  }
+  if (
+    bucket.capacityMinutes !== null &&
+    bucket.usedMinutes + heldMinutes + req.minutes > bucket.capacityMinutes
+  ) {
+    throw new QuotaExceededError('minutes', dateLabel);
+  }
 
-      await tx.quotaDay.update({
-        where: { id: bucket.id },
-        data: {
-          usedJobs,
-          usedUnits,
-          usedMinutes,
-          ...(becameFull ? { status: 'FULL' as const } : {}),
-        },
-      });
+  // 4. Consume, and close the day if any axis is now exhausted.
+  const usedJobs = bucket.usedJobs + 1;
+  const usedUnits = bucket.usedUnits + req.units;
+  const usedMinutes = bucket.usedMinutes + req.minutes;
+  const becameFull =
+    (bucket.capacityJobs !== null && usedJobs >= bucket.capacityJobs) ||
+    (bucket.capacityUnits !== null && usedUnits >= bucket.capacityUnits) ||
+    (bucket.capacityMinutes !== null && usedMinutes >= bucket.capacityMinutes);
 
-      // 5. The customer's own hold has now been converted into a real booking.
-      if (sessionKey) {
-        await tx.quotaHold.deleteMany({ where: { quotaDayId: bucket.id, sessionKey } });
-      }
-
-      return { quotaDayId: bucket.id, usedJobs, usedUnits, usedMinutes, becameFull };
+  await tx.quotaDay.update({
+    where: { id: bucket.id },
+    data: {
+      usedJobs,
+      usedUnits,
+      usedMinutes,
+      ...(becameFull ? { status: 'FULL' as const } : {}),
     },
-    { isolationLevel: 'ReadCommitted', timeout: 15_000 },
-  );
+  });
+
+  // 5. The customer's own hold has now been converted into a real booking.
+  if (sessionKey) {
+    await tx.quotaHold.deleteMany({ where: { quotaDayId: bucket.id, sessionKey } });
+  }
+
+  return { quotaDayId: bucket.id, usedJobs, usedUnits, usedMinutes, becameFull };
 }
 
 /** Return capacity to the pool on cancellation or reschedule. */

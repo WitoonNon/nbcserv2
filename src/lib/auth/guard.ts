@@ -17,12 +17,20 @@ export class ForbiddenError extends Error {
   }
 }
 
-/** Page guard: bounce to login, preserving where the user was heading. */
+/**
+ * Page guard: bounce to login, preserving where the user was heading.
+ *
+ * A user who has never replaced the password an admin gave them is redirected
+ * to /change-password instead. Every guarded page and every server action runs
+ * through this or assertPermission(), so the only place a flagged account can
+ * reach is the change-password screen itself.
+ */
 export async function requireUser(returnTo?: string): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) {
     redirect(returnTo ? `/login?next=${encodeURIComponent(returnTo)}` : '/login');
   }
+  if (user.mustChangePassword) redirect('/change-password');
   return user;
 }
 
@@ -39,6 +47,9 @@ export async function requirePermission(permission: string, returnTo?: string): 
 export async function assertPermission(permission: string): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) throw new ForbiddenError('ยังไม่ได้เข้าสู่ระบบ');
+  // A flagged account is not trusted to act, only to fix its own password.
+  // Without this check a stale open tab could still submit writes.
+  if (user.mustChangePassword) throw new ForbiddenError('กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน');
   if (!user.permissions.has(permission)) throw new ForbiddenError(permission);
   return user;
 }

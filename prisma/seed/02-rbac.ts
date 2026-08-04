@@ -88,13 +88,22 @@ export async function seedRbac() {
     }
   }
 
-  // Dev password only — production must force a reset on first login.
+  // Dev password only. These four accounts are exempt from the first-login
+  // password change because their password is published in the README and they
+  // exist to be logged into repeatedly during development and demos. Every
+  // account created through /settings/users starts flagged instead, so the
+  // client's real staff cannot keep a password an admin chose for them.
   const devHash = hashPassword('nbc-dev-1234');
   for (const u of DEMO_USERS) {
     const user = await prisma.user.upsert({
       where: { email: u.email },
-      create: { email: u.email, name: u.name, passwordHash: devHash },
-      update: { name: u.name },
+      create: {
+        email: u.email,
+        name: u.name,
+        passwordHash: devHash,
+        mustChangePassword: false,
+      },
+      update: { name: u.name, mustChangePassword: false },
     });
     for (const roleCode of u.roles) {
       const role = await prisma.role.findUniqueOrThrow({ where: { code: roleCode } });

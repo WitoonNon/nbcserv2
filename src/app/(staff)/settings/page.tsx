@@ -6,14 +6,15 @@ export const dynamic = 'force-dynamic';
 
 async function loadCounts() {
   try {
-    const [users, services, parts, assumptions, forms] = await Promise.all([
+    const [users, services, parts, assumptions, forms, quotaRules] = await Promise.all([
       prisma.user.count({ where: { isActive: true } }),
       prisma.serviceCatalogItem.count({ where: { isActive: true } }),
       prisma.part.count({ where: { isActive: true } }),
       prisma.appConfig.count({ where: { isAssumption: true } }),
       prisma.formTemplate.count({ where: { isActive: true } }),
+      prisma.quotaRule.count({ where: { isActive: true } }),
     ]);
-    return { users, services, parts, assumptions, forms };
+    return { users, services, parts, assumptions, forms, quotaRules };
   } catch {
     return null;
   }
@@ -24,6 +25,12 @@ export default async function SettingsPage() {
   const counts = await loadCounts();
 
   const CARDS = [
+    {
+      href: '/settings/quota',
+      title: 'โควตาการรับงานรายวัน',
+      desc: 'กำหนดจำนวนงาน จำนวนเครื่อง และเวลาช่างที่รับได้ต่อวัน แยกตามประเภทงานและเขต',
+      meta: counts ? `${counts.quotaRules} กฎ` : null,
+    },
     {
       href: '/settings/users',
       title: 'ผู้ใช้งานและสิทธิ์',

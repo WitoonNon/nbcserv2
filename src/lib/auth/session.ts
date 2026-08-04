@@ -28,6 +28,8 @@ export interface SessionUser {
   roles: string[];
   permissions: Set<string>;
   technicianId: string | null;
+  /** Still on the password an admin set — see requireUser(). */
+  mustChangePassword: boolean;
 }
 
 export async function createSession(userId: string, meta?: { ip?: string; userAgent?: string }) {
@@ -104,6 +106,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     roles: session.user.roles.map((r) => r.role.code),
     permissions,
     technicianId: session.user.technician?.id ?? null,
+    mustChangePassword: session.user.mustChangePassword,
   };
 });
 

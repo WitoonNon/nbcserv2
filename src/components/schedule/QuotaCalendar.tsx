@@ -2,7 +2,11 @@
 
 import { useActionState, useState } from 'react';
 import type { CalendarDay } from '@/modules/scheduling/schedule.service';
-import { toggleDayAction, type ScheduleState } from '@/app/(staff)/schedule/actions';
+import {
+  setDayCapacityAction,
+  toggleDayAction,
+  type ScheduleState,
+} from '@/app/(staff)/schedule/actions';
 import { formatMinutes } from '@/lib/utils';
 
 const WEEKDAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
@@ -41,7 +45,20 @@ export function QuotaCalendar({
   category: string;
 }) {
   const [state, action, pending] = useActionState<ScheduleState, FormData>(toggleDayAction, {});
+  const [capState, capAction, capPending] = useActionState<ScheduleState, FormData>(
+    setDayCapacityAction,
+    {},
+  );
   const [selected, setSelected] = useState<CalendarDay | null>(null);
+  const [editingCapacity, setEditingCapacity] = useState(false);
+
+  const notice = state.ok ?? capState.ok;
+  const problem = state.error ?? capState.error;
+
+  function select(day: CalendarDay | null) {
+    setSelected(day);
+    setEditingCapacity(false);
+  }
 
   const byIso = new Map(days.map((d) => [d.date, d]));
   const first = new Date(Date.UTC(year, month - 1, 1));
@@ -58,10 +75,8 @@ export function QuotaCalendar({
 
   return (
     <div className="space-y-3">
-      {state.error && (
-        <div className="card p-3 bg-[var(--color-brand-orange-50)] text-sm">{state.error}</div>
-      )}
-      {state.ok && <div className="card p-3 bg-green-50 border-green-300 text-sm">{state.ok}</div>}
+      {problem && <div className="card p-3 bg-[var(--color-brand-orange-50)] text-sm">{problem}</div>}
+      {notice && <div className="card p-3 bg-green-50 border-green-300 text-sm">{notice}</div>}
 
       <div className="card p-3">
         <div className="grid grid-cols-7 gap-1.5">
@@ -77,7 +92,7 @@ export function QuotaCalendar({
               <button
                 key={day.date}
                 type="button"
-                onClick={() => setSelected(day)}
+                onClick={() => select(day)}
                 className={`min-h-[86px] border rounded-[3px] p-1.5 text-left transition-colors ${style.cell} ${
                   selected?.date === day.date
                     ? 'border-[var(--color-brand-orange)] ring-1 ring-[var(--color-brand-orange)]'
@@ -119,7 +134,7 @@ export function QuotaCalendar({
         <div className="card p-4">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <h2 className="text-base">รายละเอียดวันที่ {selected.date}</h2>
-            <button onClick={() => setSelected(null)} className="text-sm text-[var(--color-muted)]">ปิด</button>
+            <button onClick={() => select(null)} className="text-sm text-[var(--color-muted)]">ปิด</button>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3 mt-2">
@@ -146,11 +161,84 @@ export function QuotaCalendar({
               <Bar used={selected.usedMinutes} capacity={selected.capacityMinutes} />
             </div>
           </div>
-          <p className="text-[11px] text-[var(--color-muted)] mt-2">
-            สถานะ: {STATUS_STYLE[selected.status]?.label ?? selected.status} · วันจะปิดรับอัตโนมัติเมื่อแกนใดแกนหนึ่งเต็ม
-          </p>
+          <div className="flex items-center justify-between gap-3 flex-wrap mt-2">
+            <p className="text-[11px] text-[var(--color-muted)]">
+              สถานะ: {STATUS_STYLE[selected.status]?.label ?? selected.status} · วันจะปิดรับอัตโนมัติเมื่อแกนใดแกนหนึ่งเต็ม
+            </p>
+            {selected.status !== 'HOLIDAY' && !editingCapacity && (
+              <button
+                type="button"
+                onClick={() => setEditingCapacity(true)}
+                className="text-xs text-[var(--color-brand-blue-600)] underline underline-offset-2"
+              >
+                ปรับโควตาเฉพาะวันนี้
+              </button>
+            )}
+          </div>
 
-          {selected.status !== 'HOLIDAY' && (
+          {editingCapacity && (
+            <form
+              action={capAction}
+              className="mt-3 border-t border-[var(--color-line)] pt-3 space-y-2"
+            >
+              <input type="hidden" name="date" value={selected.date} />
+              <input type="hidden" name="zoneId" value={zoneId} />
+              <input type="hidden" name="category" value={category} />
+
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px]">ปรับเพดานเฉพาะวันที่ {selected.date}</p>
+                <button
+                  type="button"
+                  onClick={() => setEditingCapacity(false)}
+                  className="text-xs text-[var(--color-muted)] underline underline-offset-2"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="block">
+                  <span className="block text-[11px] text-[var(--color-muted)] mb-0.5">จำนวนงาน</span>
+                  <input type="number" name="capacityJobs" min={0} step={1} placeholder="∞"
+                    defaultValue={selected.capacityJobs ?? ''}
+                    className="w-full border border-[var(--color-line)] rounded-[3px] px-2.5 py-1.5 text-sm bg-white" />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] text-[var(--color-muted)] mb-0.5">จำนวนเครื่อง</span>
+                  <input type="number" name="capacityUnits" min={0} step={1} placeholder="∞"
+                    defaultValue={selected.capacityUnits ?? ''}
+                    className="w-full border border-[var(--color-line)] rounded-[3px] px-2.5 py-1.5 text-sm bg-white" />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] text-[var(--color-muted)] mb-0.5">เวลาช่าง (นาที)</span>
+                  <input type="number" name="capacityMinutes" min={0} step={30} placeholder="∞"
+                    defaultValue={selected.capacityMinutes ?? ''}
+                    className="w-full border border-[var(--color-line)] rounded-[3px] px-2.5 py-1.5 text-sm bg-white" />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-end">
+                <label className="block flex-1 min-w-[220px]">
+                  <span className="block text-[11px] text-[var(--color-muted)] mb-0.5">
+                    เหตุผล (บันทึกในประวัติการแก้ไขโควตา)
+                  </span>
+                  <input name="reason" required placeholder="เช่น เสาร์นี้มีช่างแค่ 2 ทีม"
+                    className="w-full border border-[var(--color-line)] rounded-[3px] px-2.5 py-1.5 text-sm bg-white" />
+                </label>
+                <button disabled={capPending}
+                  className="bg-[var(--color-brand-orange)] text-white rounded-[3px] px-4 py-1.5 text-sm font-semibold disabled:opacity-60">
+                  {capPending ? 'กำลังบันทึก…' : 'บันทึกโควตาวันนี้'}
+                </button>
+              </div>
+
+              <p className="text-[11px] text-[var(--color-muted)]">
+                มีผลเฉพาะวันนี้วันเดียว ไม่กระทบกฎโควตาทั่วไป ·
+                ถ้าลดต่ำกว่างานที่จองไว้แล้ว งานเดิม<strong>ไม่ถูกยกเลิก</strong> แต่วันนี้จะหยุดรับงานเพิ่ม
+              </p>
+            </form>
+          )}
+
+          {selected.status !== 'HOLIDAY' && !editingCapacity && (
             <form action={action} className="mt-3 flex flex-wrap gap-2 items-end border-t border-[var(--color-line)] pt-3">
               <input type="hidden" name="date" value={selected.date} />
               <input type="hidden" name="zoneId" value={zoneId} />

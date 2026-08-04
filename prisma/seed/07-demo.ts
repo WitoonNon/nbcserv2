@@ -43,10 +43,12 @@ export async function seedDemo() {
 
   for (const t of TECHNICIANS) {
     const email = `${t.code.toLowerCase()}@nbcgroup.co.th`;
+    // Demo technicians share the README's published dev password, so they are
+    // exempt from the first-login change the same way the office accounts are.
     const user = await prisma.user.upsert({
       where: { email },
-      create: { email, name: t.name, passwordHash: devHash },
-      update: { name: t.name },
+      create: { email, name: t.name, passwordHash: devHash, mustChangePassword: false },
+      update: { name: t.name, mustChangePassword: false },
     });
     await prisma.userRole.upsert({
       where: { userId_roleId: { userId: user.id, roleId: techRole.id } },

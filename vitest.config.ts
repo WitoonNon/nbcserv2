@@ -16,6 +16,10 @@ export default defineConfig({
     // Concurrency tests hit real Postgres and must not run against each other.
     fileParallelism: false,
     testTimeout: 30_000,
+    // Setup and teardown open their own connections to a hosted database in
+    // another region. The 10s default is a network-latency tripwire, not a
+    // signal that anything is wrong, so it matches testTimeout.
+    hookTimeout: 30_000,
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
   },
 });

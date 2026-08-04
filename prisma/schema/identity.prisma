@@ -15,6 +15,14 @@ model User {
   locale       String    @default("th")
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
+
+  /// Seeded and admin-created accounts all start on the same known password.
+  /// Until the holder replaces it, the account proves nothing about who is
+  /// using it — so a flagged user can reach the change-password screen and
+  /// nothing else.
+  mustChangePassword Boolean   @default(true)
+  passwordChangedAt  DateTime?
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

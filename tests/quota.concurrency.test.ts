@@ -75,8 +75,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.quotaDay.deleteMany({ where: { zoneId } });
-  await prisma.zone.deleteMany({ where: { code: TEST_ZONE } });
+  // `where: { zoneId: undefined }` is not "match nothing" in Prisma, it is "no
+  // filter at all". Without this guard a failure in beforeAll would leave
+  // zoneId unset and this teardown would wipe every quota bucket in the
+  // database — the live booking calendar included.
+  if (zoneId) {
+    await prisma.quotaDay.deleteMany({ where: { zoneId } });
+    await prisma.zone.deleteMany({ where: { code: TEST_ZONE } });
+  }
   await prisma.$disconnect();
 });
 
