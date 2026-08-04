@@ -7,9 +7,11 @@ export const dynamic = 'force-dynamic';
 /**
  * Delete booking holds whose ten minutes have run out.
  *
- * Availability counts live holds against capacity, so an abandoned booking form
- * keeps a slot off the market until it is swept. Without this, a day slowly
- * looks fuller than it is and the office loses work it could have taken.
+ * This is table hygiene, not correctness. Both getAvailability() and
+ * bookSlotWithin() filter on `expiresAt > NOW()`, so an expired hold already
+ * stops counting against capacity the moment it lapses — nothing is blocked
+ * while it waits to be swept. Running daily is therefore sufficient; the only
+ * cost of a late sweep is dead rows in quota_holds.
  */
 export async function GET(req: Request) {
   const denied = authorizeCron(req);

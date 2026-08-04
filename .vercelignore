@@ -1,0 +1,12 @@
+# Vercel uploads by its own ignore list, not .gitignore — without this the
+# local .env (which holds the direct IPv6 database URL and its password) would
+# be shipped into the build. Production reads its values from Vercel env vars.
+.env
+.env.*
+!.env.example
+
+.storage/
+coverage/
+tests/
+docs/
+scripts/
