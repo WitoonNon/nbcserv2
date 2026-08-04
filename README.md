@@ -184,8 +184,11 @@ dispatch  workorders billing    media    notifications platform
    - **ออก PDF ภาษาไทย** (พิสูจน์เทคนิคแล้วด้วย Chromium + Sarabun)
    - ทำงานออฟไลน์แล้ว sync
 3. ~~ขึ้นเซิร์ฟเวอร์จริง~~ ✅ deploy แล้วที่ https://nbcserv.vercel.app
-   ⚠️ **ยังต้องเปลี่ยนรหัสฐานข้อมูลก่อนใช้งานกับข้อมูลจริง** — รหัสปัจจุบันเคยส่งผ่านแชท
-   รีเซ็ตที่ Supabase → Settings → Database แล้วอัปเดต `DATABASE_URL` บน Vercel
+   🔴 **ยังต้องเปลี่ยนรหัสฐานข้อมูลก่อนใช้งานกับข้อมูลจริง** — รหัสปัจจุบันเคยส่งผ่านแชท
+   ต้องทำในหน้า **Supabase → Settings → Database → Reset database password**
+   เท่านั้น เปลี่ยนผ่าน SQL ไม่ได้ — Supabase บล็อกด้วย `supautils`
+   (*Only superusers can alter privileged roles* · role `postgres` มี `rolsuper: false`)
+   แล้วอัปเดต `DATABASE_URL` บน Vercel ทั้ง production และ preview
    ⚠️ **ต่อ Vercel ต้องใช้ connection pooler เท่านั้น** — Supabase direct host เป็น IPv6-only
    ซึ่ง Vercel Functions ต่อไม่ได้ (`aws-0-ap-southeast-1.pooler.supabase.com:6543`)
 
