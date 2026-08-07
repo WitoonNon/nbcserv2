@@ -1,5 +1,6 @@
 import { prisma } from './client.js';
-import { FORM_TEMPLATES_V1 } from '../../src/lib/forms/templates.js';
+import { FORM_TEMPLATES_V1, FORM_TEMPLATES_CURRENT } from '../../src/lib/forms/templates.js';
+import type { FormSchema } from '../../src/lib/forms/types.js';
 import type { FormCode } from '../../src/generated/prisma/index.js';
 
 /**
@@ -7,16 +8,26 @@ import type { FormCode } from '../../src/generated/prisma/index.js';
  *
  * v1 is drafted from what NBC already publishes — their work-process page
  * specifies the measurements technicians record, and their troubleshooting
- * page lists the standard first checks.
+ * page lists the standard first checks. REPAIR v2 is built field-for-field
+ * from the client's real SERVICE WORK ORDER.
  *
- * @client-confirm A1/A2/A3 — when the real paper forms arrive we publish
- * version 2. Every work order already issued keeps rendering against v1
- * because templateVersion is stored on the work order itself.
+ * EVERY version is published, not just the newest: a work order stores the
+ * version it was filled in against, so the row it points at has to keep
+ * existing. Seeding only the current version would leave documents issued
+ * against v1 unable to render at all.
+ *
+ * @client-confirm A1/A2 — the remaining two paper forms are still outstanding;
+ * publishing them is inserting a row, not a migration.
  */
 export async function seedForms() {
-  const entries = Object.entries(FORM_TEMPLATES_V1) as [FormCode, (typeof FORM_TEMPLATES_V1)[keyof typeof FORM_TEMPLATES_V1]][];
+  const published = new Map<string, [FormCode, FormSchema]>();
+  for (const set of [FORM_TEMPLATES_V1, FORM_TEMPLATES_CURRENT]) {
+    for (const [code, schema] of Object.entries(set) as [FormCode, FormSchema][]) {
+      published.set(`${code}:${schema.version}`, [code, schema]);
+    }
+  }
 
-  for (const [code, schema] of entries) {
+  for (const [code, schema] of published.values()) {
     await prisma.formTemplate.upsert({
       where: { code_version: { code, version: schema.version } },
       create: {
@@ -67,5 +78,8 @@ export async function seedForms() {
     });
   }
 
-  console.log(`  forms: ${entries.length} form templates v1, ${notifications.length} notification templates`);
+  const versions = [...published.values()].map(([c, s]) => `${c} v${s.version}`).join(', ');
+  console.log(
+    `  forms: ${published.size} form templates (${versions}), ${notifications.length} notification templates`,
+  );
 }

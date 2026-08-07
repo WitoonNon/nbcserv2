@@ -147,26 +147,29 @@ function fieldValidator(field: FormField): z.ZodTypeAny {
     }
     case 'checkbox':
       return field.required ? z.boolean() : z.boolean().nullish();
+    // List-valued fields are absent, not empty, until the technician touches
+    // them. Requiring them unconditionally made every optional checklist and
+    // photo group block submission — `required` has to mean something here for
+    // the same reason it does on a text field.
     case 'multiselect':
-      return z.array(z.string());
+      return field.required ? z.array(z.string()).min(1) : z.array(z.string()).nullish();
+    case 'assetList':
+      return field.required ? z.array(z.string()).min(1) : z.array(z.string()).nullish();
     case 'measurementGroup':
-      return z.record(z.string(), z.number().nullish());
+      return z.record(z.string(), z.number().nullish()).nullish();
     case 'photoGroup': {
-      const s = z.array(z.string());
-      return field.minCount ? s.min(field.minCount) : s;
+      // minCount describes how many photos a filled-in group needs; it does
+      // not by itself make the group mandatory.
+      if (!field.required) return z.array(z.string()).nullish();
+      return z.array(z.string()).min(field.minCount ?? 1);
     }
     case 'partsTable':
-      return z.array(
-        z.object({
-          partId: z.string().nullish(),
-          name: z.string(),
-          qty: z.number(),
-          unitPrice: z.number(),
-          serialNo: z.string().nullish(),
-        }),
-      );
-    case 'assetList':
-      return z.array(z.string());
+      // Derived from the declared columns rather than a fixed shape. NBC's
+      // ใบซ่อม prints ลำดับ / รายการ / จำนวน / หน่วย and deliberately no price
+      // column, so a validator hardcoding {name, qty, unitPrice} rejects every
+      // row the renderer produces. The table is part of the form definition,
+      // so its row shape has to come from the definition too.
+      return z.array(z.record(z.string(), z.union([z.string(), z.number(), z.null()]))).nullish();
     case 'signature':
       return field.required ? z.string().min(1) : z.string().nullish();
     default: {

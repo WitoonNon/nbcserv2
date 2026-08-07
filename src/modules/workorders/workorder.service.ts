@@ -75,6 +75,11 @@ export async function createWorkOrder(params: {
   code: FormCode;
   actorId?: string | null;
 }): Promise<{ workOrderId: string; docNo: string; reused: boolean }> {
+  // The default 5s interactive-transaction budget is a local-network
+  // assumption. This transaction takes a FOR UPDATE lock on the document
+  // sequence and does four round trips to a database in another region; over a
+  // pooled connection that alone can exceed 5s, and the failure looks like a
+  // bug rather than latency.
   return prisma.$transaction(async (tx) => {
     const existing = await tx.workOrder.findFirst({
       where: { jobId: params.jobId, templateCode: params.code, status: 'DRAFT' },
@@ -111,7 +116,7 @@ export async function createWorkOrder(params: {
     });
 
     return { workOrderId: wo.id, docNo, reused: false };
-  });
+  }, { timeout: 15_000 });
 }
 
 // ---------------------------------------------------------------------------

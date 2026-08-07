@@ -1,12 +1,35 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
+import type { FormCode, ServiceCategory, WorkOrderStatus } from '@/generated/prisma';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { CATEGORY_LABEL, JOB_SIZE_LABEL } from '@/lib/labels';
 import { formatThaiDate } from '@/lib/date/buddhist';
 import { formatTHB } from '@/lib/utils';
+import { openWorkOrderAction } from '@/app/(staff)/work-orders/d/[id]/actions';
 
 export const dynamic = 'force-dynamic';
+
+const FORM_LABEL: Record<FormCode, string> = {
+  INSPECTION_REQUEST: 'ใบตรวจเช็ค/แจ้งซ่อม',
+  CLEANING_PM: 'ใบล้าง/PM',
+  REPAIR: 'ใบซ่อม',
+};
+
+/** Installation has no form of its own yet; a repair sheet is the closest fit. */
+const FORM_FOR_CATEGORY: Record<ServiceCategory, FormCode> = {
+  INSPECTION_REPAIR: 'INSPECTION_REQUEST',
+  CLEANING_PM: 'CLEANING_PM',
+  REPAIR: 'REPAIR',
+  INSTALLATION: 'REPAIR',
+};
+
+const WORK_ORDER_STATUS_LABEL: Record<WorkOrderStatus, string> = {
+  DRAFT: 'ร่าง',
+  SUBMITTED: 'รอหัวหน้างานตรวจ',
+  APPROVED: 'อนุมัติแล้ว',
+  RETURNED: 'ตีกลับให้แก้ไข',
+};
 
 async function loadJob(id: string) {
   try {
@@ -119,16 +142,43 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
       {/* Work orders */}
       <div className="card p-4">
-        <h2 className="text-base mb-2">ใบงานที่ผูกอยู่</h2>
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+          <h2 className="text-base">ใบงานที่ผูกอยู่</h2>
+          {/* Opening a form the job's category does not call for is a mistake,
+              not a feature — so only that form is offered by default. */}
+          <form action={openWorkOrderAction} className="flex gap-2 items-center">
+            <input type="hidden" name="jobId" value={job.id} />
+            <select
+              name="code"
+              defaultValue={FORM_FOR_CATEGORY[job.category]}
+              className="border border-[var(--color-line)] rounded-[3px] px-2.5 py-1.5 text-sm bg-white"
+            >
+              {Object.entries(FORM_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+            <button className="bg-[var(--color-brand-orange)] text-white rounded-[3px] px-4 py-1.5 text-sm font-semibold whitespace-nowrap">
+              เปิดใบงาน
+            </button>
+          </form>
+        </div>
+
         {job.workOrders.length === 0 ? (
-          <p className="text-sm text-[var(--color-muted)]">ยังไม่มีใบงาน — ช่างจะเปิดใบงานเมื่อถึงหน้างาน</p>
+          <p className="text-sm text-[var(--color-muted)]">ยังไม่มีใบงาน</p>
         ) : (
-          <ul className="text-sm space-y-1">
+          <ul className="text-sm divide-y divide-[var(--color-line)]">
             {job.workOrders.map((w) => (
-              <li key={w.id} className="flex gap-3">
-                <span className="font-mono text-xs text-[var(--color-brand-blue-600)]">{w.docNo}</span>
-                <span>{w.templateCode} v{w.templateVersion}</span>
-                <span className="text-xs text-[var(--color-muted)]">{w.status}</span>
+              <li key={w.id}>
+                <Link
+                  href={`/work-orders/d/${w.id}`}
+                  className="flex gap-3 items-center flex-wrap py-2 hover:text-[var(--color-brand-blue-600)]"
+                >
+                  <span className="font-mono text-xs text-[var(--color-brand-blue-600)]">{w.docNo}</span>
+                  <span>{FORM_LABEL[w.templateCode]} v{w.templateVersion}</span>
+                  <span className="text-[11px] text-[var(--color-muted)] ml-auto">
+                    {WORK_ORDER_STATUS_LABEL[w.status] ?? w.status}
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
