@@ -22,13 +22,20 @@ const CATEGORIES: { code: ServiceCategory; th: string; desc: string }[] = [
   { code: 'REPAIR', th: 'ซ่อม', desc: 'แก้ไขอาการเสีย เปลี่ยนอะไหล่' },
 ];
 
+/**
+ * The machine types NBC actually sells, as revised by the client on
+ * 5 ส.ค. 2569. ซ่อนในฝ้า เล็ก/ใหญ่ were retired in favour of a single
+ * เปลือยซ่อนฝ้า; the retired values still exist in the database so historical
+ * jobs keep pricing correctly, they are simply no longer offered here.
+ */
 const AC_TYPES: { code: AcType; th: string }[] = [
   { code: 'WALL', th: 'แบบติดผนัง' },
   { code: 'CEILING', th: 'แบบแขวน' },
   { code: 'STANDING', th: 'แบบตู้ตั้ง' },
   { code: 'CASSETTE_4WAY', th: 'แบบฝังฝ้า 4 ทิศทาง' },
-  { code: 'CONCEALED_SMALL', th: 'แบบซ่อนในฝ้า (เล็ก)' },
-  { code: 'CONCEALED_LARGE', th: 'แบบซ่อนในฝ้า (ใหญ่)' },
+  { code: 'CASSETTE_1WAY', th: 'แบบฝังฝ้าทิศทางเดียว' },
+  { code: 'CONCEALED', th: 'แบบเปลือยซ่อนฝ้า' },
+  { code: 'AHU', th: 'แบบ AHU' },
   { code: 'OTHER', th: 'อื่นๆ / ไม่แน่ใจ' },
 ];
 
@@ -315,12 +322,31 @@ export function BookingWizard({
                 ({estimate.minutesPerUnit} นาที × {estimate.unitCount} เครื่อง)
               </span>
             </p>
-            {estimate.estimatedTotal !== null && (
-              <p>
-                ราคาโดยประมาณ <strong>{formatTHB(estimate.estimatedTotal)}</strong>{' '}
-                <span className="text-[var(--color-muted)]">
-                  — ราคาจริงยืนยันหน้างานตามสภาพเครื่อง
-                </span>
+            {estimate.priceRange ? (
+              <>
+                <p>
+                  ราคาโดยประมาณ{' '}
+                  <strong>
+                    {estimate.priceRange.low.toLocaleString('th-TH')}–
+                    {estimate.priceRange.high.toLocaleString('th-TH')} บาท
+                  </strong>{' '}
+                  <span className="text-[var(--color-muted)]">ต่อเครื่อง</span>
+                </p>
+                {estimate.unitCount > 1 && (
+                  <p className="text-[var(--color-muted)]">
+                    รวม {estimate.unitCount} เครื่อง ประมาณ{' '}
+                    {(estimate.priceRange.low * estimate.unitCount).toLocaleString('th-TH')}–
+                    {(estimate.priceRange.high * estimate.unitCount).toLocaleString('th-TH')} บาท
+                  </p>
+                )}
+                <p className="text-[11px] text-[var(--color-muted)]">
+                  ราคาขึ้นกับขนาดเครื่องและสภาพหน้างาน · ลูกค้าในสัญญาได้ราคาพิเศษ ·
+                  ราคาจริงยืนยันหน้างาน
+                </p>
+              </>
+            ) : (
+              <p className="text-[var(--color-muted)]">
+                ราคาสำหรับเครื่องประเภทนี้ กรุณาสอบถามเจ้าหน้าที่ 02-000-7332 ต่อ 1-3
               </p>
             )}
           </div>

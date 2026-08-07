@@ -39,6 +39,13 @@ export interface BookingEstimate {
   unitPrice: number | null;
   estimatedTotal: number | null;
   serviceName: string | null;
+  /**
+   * The published two-tier range for one unit: contract price to standard
+   * price. A public visitor is not yet known to be a contract customer, so
+   * quoting one number would be wrong for half the audience.
+   * Null when the client has not given a price for this machine type yet.
+   */
+  priceRange: { low: number; high: number } | null;
 }
 
 /**
@@ -63,13 +70,20 @@ export async function estimateBooking(params: {
 
   const minutesPerUnit = price?.standardDurationMin ?? 60;
 
+  // A zero price means the client has not quoted this machine type yet, not
+  // that the service is free — surface it as "ask us", never as ฿0.
+  const hasPrice = Boolean(price && (price.priceContract > 0 || price.priceStandard > 0));
+
   return {
     unitCount,
     minutesPerUnit,
     totalMinutes: minutesPerUnit * unitCount,
-    unitPrice: price?.unitPrice ?? null,
-    estimatedTotal: price ? price.unitPrice * unitCount : null,
+    unitPrice: hasPrice ? price!.unitPrice : null,
+    estimatedTotal: hasPrice ? price!.unitPrice * unitCount : null,
     serviceName: price?.nameTh ?? null,
+    priceRange: hasPrice
+      ? { low: Math.min(price!.priceContract, price!.priceStandard), high: Math.max(price!.priceContract, price!.priceStandard) }
+      : null,
   };
 }
 

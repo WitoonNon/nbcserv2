@@ -35,13 +35,20 @@ enum JobSize {
   XL
 }
 
+/// @client-confirm D3 — the customer-facing list was revised by the client on
+/// 5 ส.ค. 2569: they sell ฝังฝ้าทิศทางเดียว and เปลือยซ่อนฝ้า, and do not want
+/// ซ่อนในฝ้า เล็ก/ใหญ่ offered as a choice. The two retired values are kept in
+/// the enum because catalogue rows and past jobs still reference them — a type
+/// no longer sold is not a type that never existed.
 enum AcType {
   WALL // แอร์ติดผนัง
   CEILING // แอร์แขวน
   STANDING // แอร์ตู้ตั้ง
   CASSETTE_4WAY // แอร์ฝังฝ้า 4 ทิศทาง
-  CONCEALED_SMALL // แอร์ซ่อนในฝ้า (เล็ก)
-  CONCEALED_LARGE // แอร์ซ่อนในฝ้า (ใหญ่)
+  CASSETTE_1WAY // แอร์ฝังฝ้าทิศทางเดียว
+  CONCEALED // แอร์เปลือยซ่อนฝ้า
+  CONCEALED_SMALL // เลิกเสนอขาย — เก็บไว้เพื่อข้อมูลเดิม
+  CONCEALED_LARGE // เลิกเสนอขาย — เก็บไว้เพื่อข้อมูลเดิม
   VRV_VRF
   AHU
   CHILLER

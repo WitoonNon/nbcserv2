@@ -28,6 +28,10 @@ export interface ResolvedPrice {
   code: string;
   nameTh: string;
   unitPrice: number;
+  /** Both tiers, so a public page can quote the published range without
+   *  knowing yet whether the caller is a contract customer. */
+  priceContract: number;
+  priceStandard: number;
   standardDurationMin: number;
   crewSize: number;
   tier: PricingTier;
@@ -64,6 +68,8 @@ export async function resolvePrice(q: PriceQuery): Promise<ResolvedPrice | null>
     code: match.code,
     nameTh: match.nameTh,
     unitPrice: Number(q.tier === 'CONTRACT' ? match.priceContract : match.priceStandard),
+    priceContract: Number(match.priceContract),
+    priceStandard: Number(match.priceStandard),
     standardDurationMin: match.standardDurationMin,
     crewSize: match.crewSize,
     tier: q.tier,

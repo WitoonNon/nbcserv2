@@ -46,80 +46,91 @@ const CLEANING: CatalogRow[] = [
   },
 
   // --- แอร์แขวน / Ceiling type — 40 min ---
+  // Client-confirmed 5 ส.ค. 2569: ฿900–1,100 flat, no BTU banding.
   {
     code: 'CLEAN-CEIL-24K', category: 'CLEANING_PM', acType: 'CEILING', jobSize: 'M',
     btuMin: 0, btuMax: 24000,
     nameTh: 'ล้างแอร์แขวน 0–24,000 BTU', nameEn: 'Clean ceiling type 0–24,000 BTU',
-    durationMin: 40, priceContract: 750, priceStandard: 850, crewSize: 2,
+    durationMin: 40, priceContract: 900, priceStandard: 1100, crewSize: 2,
   },
   {
     code: 'CLEAN-CEIL-36K', category: 'CLEANING_PM', acType: 'CEILING', jobSize: 'M',
     btuMin: 24001, btuMax: 36000,
     nameTh: 'ล้างแอร์แขวน 24,001–36,000 BTU', nameEn: 'Clean ceiling type 24,001–36,000 BTU',
-    durationMin: 40, priceContract: 850, priceStandard: 950, crewSize: 2,
+    durationMin: 40, priceContract: 900, priceStandard: 1100, crewSize: 2,
   },
   {
     code: 'CLEAN-CEIL-40KUP', category: 'CLEANING_PM', acType: 'CEILING', jobSize: 'M',
     btuMin: 40001, btuMax: null,
     nameTh: 'ล้างแอร์แขวน 40,001 BTU ขึ้นไป', nameEn: 'Clean ceiling type 40,001 BTU+',
-    durationMin: 40, priceContract: 950, priceStandard: 1050, crewSize: 2,
+    durationMin: 40, priceContract: 900, priceStandard: 1100, crewSize: 2,
   },
 
   // --- แอร์ตู้ตั้ง / Standing type — 40 min ---
+  // Client-confirmed 5 ส.ค. 2569: ฿900–1,200.
   {
     code: 'CLEAN-STAND-24K', category: 'CLEANING_PM', acType: 'STANDING', jobSize: 'M',
     btuMin: 0, btuMax: 24000,
     nameTh: 'ล้างแอร์ตู้ตั้ง 0–24,000 BTU', nameEn: 'Clean standing type 0–24,000 BTU',
-    durationMin: 40, priceContract: 750, priceStandard: 850, crewSize: 2,
+    durationMin: 40, priceContract: 900, priceStandard: 1200, crewSize: 2,
   },
   {
     code: 'CLEAN-STAND-36K', category: 'CLEANING_PM', acType: 'STANDING', jobSize: 'M',
     btuMin: 24001, btuMax: 36000,
     nameTh: 'ล้างแอร์ตู้ตั้ง 24,001–36,000 BTU', nameEn: 'Clean standing type 24,001–36,000 BTU',
-    durationMin: 40, priceContract: 850, priceStandard: 950, crewSize: 2,
+    durationMin: 40, priceContract: 900, priceStandard: 1200, crewSize: 2,
   },
   {
     code: 'CLEAN-STAND-40KUP', category: 'CLEANING_PM', acType: 'STANDING', jobSize: 'M',
     btuMin: 40001, btuMax: null,
     nameTh: 'ล้างแอร์ตู้ตั้ง 40,001 BTU ขึ้นไป', nameEn: 'Clean standing type 40,001 BTU+',
-    durationMin: 40, priceContract: 950, priceStandard: 1050, crewSize: 2,
+    durationMin: 40, priceContract: 900, priceStandard: 1200, crewSize: 2,
   },
 
   // --- แอร์ฝังฝ้า 4 ทิศทาง / Cassette 4-way — 60 min ---
+  // Client-confirmed 5 ส.ค. 2569: ฿900–1,400.
   {
-    code: 'CLEAN-CAS4-40KUP', category: 'CLEANING_PM', acType: 'CASSETTE_4WAY', jobSize: 'M',
-    btuMin: 40001, btuMax: null,
-    nameTh: 'ล้างแอร์ฝังฝ้า 4 ทิศทาง 40,001 BTU ขึ้นไป', nameEn: 'Clean cassette 4-way 40,001 BTU+',
-    durationMin: 60, priceContract: 1000, priceStandard: 1200, crewSize: 2,
+    code: 'CLEAN-CAS4', category: 'CLEANING_PM', acType: 'CASSETTE_4WAY', jobSize: 'M',
+    btuMin: null, btuMax: null,
+    nameTh: 'ล้างแอร์ฝังฝ้า 4 ทิศทาง', nameEn: 'Clean cassette 4-way',
+    durationMin: 60, priceContract: 900, priceStandard: 1400, crewSize: 2,
   },
 
-  // --- แอร์ซ่อนในฝ้า / Concealed — 90 min ---
+  // --- แอร์ฝังฝ้าทิศทางเดียว / Cassette 1-way — 60 min ---
+  // Client-confirmed 5 ส.ค. 2569: ฿900–1,100.
   {
-    code: 'CLEAN-CONC-SM-24K', category: 'CLEANING_PM', acType: 'CONCEALED_SMALL', jobSize: 'L',
-    btuMin: 0, btuMax: 24000,
-    nameTh: 'ล้างแอร์ซ่อนในฝ้า (เล็ก) 0–24,000 BTU', nameEn: 'Clean concealed small 0–24,000 BTU',
-    durationMin: 90, priceContract: 1200, priceStandard: 1300, crewSize: 2,
-  },
-  {
-    code: 'CLEAN-CONC-LG-36K', category: 'CLEANING_PM', acType: 'CONCEALED_LARGE', jobSize: 'L',
-    btuMin: 24001, btuMax: 36000,
-    nameTh: 'ล้างแอร์ซ่อนในฝ้า (ใหญ่) 24,001–36,000 BTU', nameEn: 'Clean concealed large 24,001–36,000 BTU',
-    durationMin: 90, priceContract: 1050, priceStandard: 1700, crewSize: 2,
-  },
-  {
-    code: 'CLEAN-CONC-LG-40KUP', category: 'CLEANING_PM', acType: 'CONCEALED_LARGE', jobSize: 'L',
-    btuMin: 40001, btuMax: null,
-    nameTh: 'ล้างแอร์ซ่อนในฝ้า (ใหญ่) 40,001 BTU ขึ้นไป', nameEn: 'Clean concealed large 40,001 BTU+',
-    durationMin: 90, priceContract: 1800, priceStandard: 2000, crewSize: 2,
+    code: 'CLEAN-CAS1', category: 'CLEANING_PM', acType: 'CASSETTE_1WAY', jobSize: 'M',
+    btuMin: null, btuMax: null,
+    nameTh: 'ล้างแอร์ฝังฝ้าทิศทางเดียว', nameEn: 'Clean cassette 1-way',
+    durationMin: 60, priceContract: 900, priceStandard: 1100, crewSize: 2,
   },
 
-  // --- ระบบใหญ่ — the site lists these WITHOUT prices ---
-  // @client-confirm D4 — price and duration are placeholders.
+  // --- แอร์เปลือยซ่อนฝ้า / Concealed ducted — 90 min ---
+  // @client-confirm D5 — the client added this type on 5 ส.ค. 2569 but did not
+  // quote a price for it. Zero renders as "สอบถามเจ้าหน้าที่" rather than as
+  // free, which is the safe way to be missing a price on a public page.
+  {
+    code: 'CLEAN-CONC', category: 'CLEANING_PM', acType: 'CONCEALED', jobSize: 'L',
+    btuMin: null, btuMax: null,
+    nameTh: 'ล้างแอร์เปลือยซ่อนฝ้า', nameEn: 'Clean concealed ducted',
+    durationMin: 90, priceContract: 0, priceStandard: 0, crewSize: 2,
+  },
+
+  // แอร์ซ่อนในฝ้า เล็ก/ใหญ่ (CLEAN-CONC-SM-24K, CLEAN-CONC-LG-36K,
+  // CLEAN-CONC-LG-40KUP) were withdrawn by the client on 5 ส.ค. 2569 in favour
+  // of เปลือยซ่อนฝ้า above. They are deliberately absent from this list rather
+  // than listed-but-inactive: seedCatalog() deactivates whatever is missing, so
+  // the list stays a statement of what is currently sold. The rows survive in
+  // the database for jobs that already used them, and their AcType enum values
+  // survive with them.
+
+  // --- ระบบใหญ่ ---
+  // Client-confirmed 5 ส.ค. 2569: AHU ฿1,800–6,500.
   {
     code: 'CLEAN-AHU', category: 'CLEANING_PM', acType: 'AHU', jobSize: 'XL',
     btuMin: null, btuMax: null,
     nameTh: 'ล้าง/บำรุงรักษา AHU', nameEn: 'AHU cleaning & maintenance',
-    durationMin: 240, priceContract: 0, priceStandard: 0, crewSize: 3,
+    durationMin: 240, priceContract: 1800, priceStandard: 6500, crewSize: 3,
   },
   {
     code: 'CLEAN-CHILLER', category: 'CLEANING_PM', acType: 'CHILLER', jobSize: 'XL',
@@ -223,6 +234,19 @@ export async function seedCatalog() {
     });
   }
 
+  // Retire catalogue rows the price list no longer contains.
+  //
+  // Without this the seed only ever adds: renaming CLEAN-CAS4-40KUP to
+  // CLEAN-CAS4 left both rows active for the same acType, and resolvePrice()
+  // picks whichever the database returns first — so the quoted price for a
+  // 4-way cassette silently depended on row order. Deactivating is safe for
+  // history because charges snapshot their own price when they are written.
+  const currentCodes = [...CLEANING, ...OTHER_SERVICES].map((r) => r.code);
+  const retired = await prisma.serviceCatalogItem.updateMany({
+    where: { code: { notIn: currentCodes }, isActive: true },
+    data: { isActive: false, activeTo: activeFrom },
+  });
+
   for (const c of PART_CATEGORIES) {
     await prisma.partCategory.upsert({ where: { code: c.code }, create: c, update: {} });
   }
@@ -242,5 +266,9 @@ export async function seedCatalog() {
     });
   }
 
-  console.log(`  catalog: ${CLEANING.length + OTHER_SERVICES.length} services (from NBC published price list), ${PARTS.length} parts`);
+  console.log(
+    `  catalog: ${CLEANING.length + OTHER_SERVICES.length} services (from NBC published price list), ` +
+      `${PARTS.length} parts` +
+      (retired.count ? `, ${retired.count} retired` : ''),
+  );
 }

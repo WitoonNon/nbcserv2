@@ -26,17 +26,32 @@ function Label({ field }: { field: FormField }) {
 
 const inputCls =
   'w-full border border-[var(--color-line)] rounded-[3px] px-2.5 py-1.5 text-sm bg-white ' +
-  'focus:outline-none focus:border-[var(--color-brand-blue)] focus:ring-1 focus:ring-[var(--color-brand-blue)]';
+  'focus:outline-none focus:border-[var(--color-brand-blue)] focus:ring-1 focus:ring-[var(--color-brand-blue)] ' +
+  'disabled:bg-[var(--color-surface-alt)] disabled:text-[var(--color-muted)]';
 
-function Field({ field, values, setValue }: {
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <span className="block text-[11px] text-[var(--color-status-cancelled)] mt-0.5">{message}</span>
+  );
+}
+
+interface FieldProps {
   field: FormField;
   values: Record<string, unknown>;
   setValue: (k: string, v: unknown) => void;
-}) {
+  errors: Record<string, string>;
+  readOnly: boolean;
+}
+
+function Field({ field, values, setValue, errors, readOnly }: FieldProps) {
   if (field.visibleWhen) {
     const current = values[field.visibleWhen.key];
     if (!field.visibleWhen.equals.includes(current as string)) return null;
   }
+
+  const error = errors[field.key];
+  const errorRing = error ? ' !border-[var(--color-status-cancelled)]' : '';
 
   switch (field.kind) {
     case 'section':
@@ -50,7 +65,7 @@ function Field({ field, values, setValue }: {
           <div className="p-3 grid gap-3 sm:grid-cols-2">
             {field.fields.map((f) => (
               <div key={f.key} className={f.kind === 'textarea' || f.kind === 'multiselect' ? 'sm:col-span-2' : ''}>
-                <Field field={f} values={values} setValue={setValue} />
+                <Field field={f} values={values} setValue={setValue} errors={errors} readOnly={readOnly} />
               </div>
             ))}
           </div>
@@ -61,8 +76,10 @@ function Field({ field, values, setValue }: {
       return (
         <label className="block">
           <Label field={field} />
-          <textarea rows={2} className={inputCls} value={(values[field.key] as string) ?? ''}
+          <textarea rows={2} className={inputCls + errorRing} disabled={readOnly}
+            value={(values[field.key] as string) ?? ''}
             onChange={(e) => setValue(field.key, e.target.value)} />
+          <FieldError message={error} />
         </label>
       );
 
@@ -71,10 +88,13 @@ function Field({ field, values, setValue }: {
         <label className="block">
           <Label field={field} />
           <span className="flex items-center gap-2">
-            <input type="number" className={inputCls} value={(values[field.key] as number) ?? ''}
-              onChange={(e) => setValue(field.key, e.target.valueAsNumber)} />
+            <input type="number" className={inputCls + errorRing} disabled={readOnly}
+              value={(values[field.key] as number) ?? ''}
+              onChange={(e) =>
+                setValue(field.key, Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)} />
             {field.unit && <span className="text-sm text-[var(--color-muted)] shrink-0">{field.unit}</span>}
           </span>
+          <FieldError message={error} />
         </label>
       );
 
@@ -85,7 +105,7 @@ function Field({ field, values, setValue }: {
           <div className="flex flex-wrap gap-x-5 gap-y-2 pt-0.5">
             {field.options.map((o) => (
               <label key={o.value} className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="radio" name={field.key} value={o.value}
+                <input type="radio" name={field.key} value={o.value} disabled={readOnly}
                   checked={values[field.key] === o.value}
                   onChange={() => setValue(field.key, o.value)}
                   className="size-4 accent-[var(--color-brand-orange)]" />
@@ -94,6 +114,7 @@ function Field({ field, values, setValue }: {
               </label>
             ))}
           </div>
+          <FieldError message={error} />
         </div>
       );
 
@@ -105,7 +126,7 @@ function Field({ field, values, setValue }: {
           <div className="grid gap-y-2 gap-x-4 sm:grid-cols-3">
             {field.options.map((o) => (
               <label key={o.value} className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={selected.includes(o.value)}
+                <input type="checkbox" checked={selected.includes(o.value)} disabled={readOnly}
                   onChange={(e) =>
                     setValue(field.key, e.target.checked
                       ? [...selected, o.value]
@@ -115,6 +136,7 @@ function Field({ field, values, setValue }: {
               </label>
             ))}
           </div>
+          <FieldError message={error} />
         </div>
       );
     }
@@ -122,7 +144,7 @@ function Field({ field, values, setValue }: {
     case 'checkbox':
       return (
         <label className="flex items-center gap-2 text-sm cursor-pointer py-1">
-          <input type="checkbox" checked={Boolean(values[field.key])}
+          <input type="checkbox" checked={Boolean(values[field.key])} disabled={readOnly}
             onChange={(e) => setValue(field.key, e.target.checked)}
             className="size-4 accent-[var(--color-brand-orange)]" />
           {field.labelTh}
@@ -134,7 +156,25 @@ function Field({ field, values, setValue }: {
         { key: 'description', labelTh: 'รายการ' },
         { key: 'qty', labelTh: 'จำนวน' },
       ];
-      const rows = Array.from({ length: field.minRows ?? 5 });
+      const stored = Array.isArray(values[field.key])
+        ? (values[field.key] as Record<string, unknown>[])
+        : [];
+      // The paper form has pre-drawn blank rows; keep them so the printed PDF
+      // matches, but never render fewer rows than the technician has filled.
+      const rowCount = Math.max(field.minRows ?? 5, stored.length);
+
+      const setCell = (rowIndex: number, colKey: string, cellValue: string) => {
+        const next = Array.from({ length: rowCount }, (_, i) => ({ ...(stored[i] ?? {}) }));
+        next[rowIndex]![colKey] = cellValue;
+        // Blank trailing rows are layout, not data — storing them would put
+        // empty objects in the payload and into the PDF's parts list.
+        const lastFilled = next.reduce(
+          (last, row, i) => (Object.values(row).some((v) => String(v ?? '').trim()) ? i : last),
+          -1,
+        );
+        setValue(field.key, next.slice(0, lastFilled + 1));
+      };
+
       return (
         <fieldset className="card overflow-hidden">
           <div className="bg-[var(--color-brand-navy)] text-white px-3 py-2 flex items-baseline gap-2">
@@ -154,14 +194,19 @@ function Field({ field, values, setValue }: {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((_, i) => (
+                {Array.from({ length: rowCount }, (_, i) => (
                   <tr key={i}>
                     {cols.map((c) => (
                       <td key={c.key} className="border border-[var(--color-line)] p-0">
                         {c.key === 'no' ? (
                           <span className="block text-center py-1.5 text-[var(--color-muted)]">{i + 1}</span>
                         ) : (
-                          <input className="w-full px-2 py-1.5 text-sm bg-transparent focus:outline-none focus:bg-[var(--color-brand-sky-50)]" />
+                          <input
+                            disabled={readOnly}
+                            value={String(stored[i]?.[c.key] ?? '')}
+                            onChange={(e) => setCell(i, c.key, e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm bg-transparent focus:outline-none focus:bg-[var(--color-brand-sky-50)] disabled:text-[var(--color-muted)]"
+                          />
                         )}
                       </td>
                     ))}
@@ -170,10 +215,14 @@ function Field({ field, values, setValue }: {
               </tbody>
             </table>
           </div>
+          <FieldError message={error} />
         </fieldset>
       );
     }
 
+    // Photo upload and signature capture land in 2.2 and 2.3. Until the storage
+    // adapter is real these render as placeholders, but the payload keys they
+    // will write are already validated, so nothing about saving changes then.
     case 'photoGroup':
       return (
         <div>
@@ -186,11 +235,11 @@ function Field({ field, values, setValue }: {
               </div>
             ))}
           </div>
-          {field.minCount && (
-            <p className="text-[11px] text-[var(--color-muted)] mt-1">
-              ต้องมีอย่างน้อย {field.minCount} รูป
-            </p>
-          )}
+          <p className="text-[11px] text-[var(--color-muted)] mt-1">
+            แนบรูปได้ในเวอร์ชันถัดไป
+            {field.minCount ? ` · ต้องมีอย่างน้อย ${field.minCount} รูป` : ''}
+          </p>
+          <FieldError message={error} />
         </div>
       );
 
@@ -214,7 +263,8 @@ function Field({ field, values, setValue }: {
         </div>
       );
 
-    case 'measurementGroup':
+    case 'measurementGroup': {
+      const readings = (values[field.key] ?? {}) as Record<string, number | null>;
       return (
         <fieldset className="card overflow-hidden sm:col-span-2">
           <div className="bg-[var(--color-brand-navy)] text-white px-3 py-2 font-[family-name:var(--font-heading)] text-[15px]">
@@ -225,34 +275,69 @@ function Field({ field, values, setValue }: {
               <label key={m.key} className="block">
                 <span className="block text-[13px] mb-1">{m.labelTh}</span>
                 <span className="flex items-center gap-2">
-                  <input type="number" className={inputCls} />
+                  <input type="number" className={inputCls} disabled={readOnly}
+                    min={m.min} max={m.max}
+                    value={readings[m.key] ?? ''}
+                    onChange={(e) =>
+                      setValue(field.key, {
+                        ...readings,
+                        [m.key]: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber,
+                      })} />
                   <span className="text-sm text-[var(--color-muted)] shrink-0">{m.unit}</span>
                 </span>
               </label>
             ))}
           </div>
+          <FieldError message={error} />
         </fieldset>
       );
+    }
 
     default:
       return (
         <label className="block">
           <Label field={field} />
-          <input className={inputCls} value={(values[field.key] as string) ?? ''}
+          <input className={inputCls + errorRing} disabled={readOnly}
+            value={(values[field.key] as string) ?? ''}
             onChange={(e) => setValue(field.key, e.target.value)} />
+          <FieldError message={error} />
         </label>
       );
   }
 }
 
-export function FormRenderer({ schema }: { schema: FormSchema }) {
-  const [values, setValues] = useState<Record<string, unknown>>({});
-  const setValue = (k: string, v: unknown) => setValues((s) => ({ ...s, [k]: v }));
+/**
+ * Controlled when `values` is supplied — the work-order editor owns the payload
+ * so it can save it. Falls back to internal state for the template preview
+ * screen, which has nothing to save it to.
+ */
+export function FormRenderer({
+  schema,
+  values: controlled,
+  onChange,
+  errors = {},
+  readOnly = false,
+}: {
+  schema: FormSchema;
+  values?: Record<string, unknown>;
+  onChange?: (next: Record<string, unknown>) => void;
+  errors?: Record<string, string>;
+  readOnly?: boolean;
+}) {
+  const [internal, setInternal] = useState<Record<string, unknown>>({});
+  const values = controlled ?? internal;
+
+  const setValue = (k: string, v: unknown) => {
+    const next = { ...values, [k]: v };
+    if (onChange) onChange(next);
+    else setInternal(next);
+  };
 
   return (
     <div className="space-y-3">
       {schema.fields.map((f) => (
-        <Field key={f.key} field={f} values={values} setValue={setValue} />
+        <Field key={f.key} field={f} values={values} setValue={setValue}
+          errors={errors} readOnly={readOnly} />
       ))}
     </div>
   );
