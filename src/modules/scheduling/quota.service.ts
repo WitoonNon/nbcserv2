@@ -309,11 +309,26 @@ export interface BookResult {
  *                   consumed (deleted) rather than counted against capacity.
  */
 export async function bookSlot(req: SlotRequest, sessionKey?: string): Promise<BookResult> {
-  return prisma.$transaction((tx) => bookSlotWithin(tx, req, sessionKey), {
-    isolationLevel: 'ReadCommitted',
-    timeout: 15_000,
-  });
+  return prisma.$transaction((tx) => bookSlotWithin(tx, req, sessionKey), TX_OPTIONS);
 }
+
+/**
+ * Contention here is the normal case, not the exception: everyone racing for
+ * the last slot on a popular day serialises on one row.
+ *
+ * `maxWait` is how long a caller may queue for a free connection before Prisma
+ * gives up. The 2s default is shorter than the queue it creates — twenty
+ * simultaneous bookings against a pool of ten means half of them wait on a
+ * connection before they can even try, and they were failing with a transaction
+ * error rather than an honest "the day is full". A customer must never be told
+ * the system is broken when the truthful answer is that someone else got the
+ * slot.
+ */
+const TX_OPTIONS = {
+  isolationLevel: 'ReadCommitted',
+  maxWait: 15_000,
+  timeout: 15_000,
+} as const;
 
 /**
  * The consume itself, for callers that already own a transaction.

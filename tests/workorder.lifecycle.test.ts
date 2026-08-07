@@ -27,15 +27,17 @@ const PHONE = '0899999002';
 let jobId: string;
 let actorId: string;
 
-/** Every required field of REPAIR v2, filled. */
+/**
+ * Every required field of REPAIR v2, filled — and nothing else.
+ *
+ * Deliberately shaped like what FormRenderer actually sends: sections the
+ * technician never opened are absent, not present-and-empty. Padding them with
+ * `{}` here would hide the case that matters.
+ */
 function validPayload() {
   return {
     customer: { customerName: 'ลูกค้าทดสอบ', tel: PHONE },
-    acUnit: {},
-    symptoms: { symptomList: ['NOT_COLD'] },
     parts: [{ description: 'ล้างคอยล์', qty: '1', unit: 'เครื่อง' }],
-    note: {},
-    warranty: {},
     photosBefore: ['before.jpg'],
     photosAfter: ['after.jpg'],
     inspectorSign: { inspectorSignature: 'sig-customer' },

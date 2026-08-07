@@ -255,7 +255,10 @@ export async function submitWorkOrder(params: {
     const labels = new Map(flattenFields(schema).map((f) => [f.key, f.labelTh]));
     const fieldErrors: Record<string, string> = {};
     for (const issue of result.error.issues) {
-      const key = String(issue.path[0] ?? '');
+      // Report against the deepest key, not the outermost one: a required
+      // field inside a section has path ['customer','tel'], and blaming
+      // "ข้อมูลลูกค้า" tells the technician nothing about which box is empty.
+      const key = String(issue.path.at(-1) ?? issue.path[0] ?? '');
       if (!key || fieldErrors[key]) continue;
       fieldErrors[key] = `${labels.get(key) ?? key}: ${issue.message}`;
     }

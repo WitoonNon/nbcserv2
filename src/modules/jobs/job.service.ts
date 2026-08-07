@@ -252,7 +252,10 @@ export async function createJobFromBooking(
 
       return { jobId: job.id, jobNo, quotaDayId: booking.quotaDayId };
     },
-    { isolationLevel: 'ReadCommitted', timeout: 15_000 },
+    // maxWait matches bookSlot(): queueing for a connection is expected when
+    // several customers book the same day at once, and timing out in the queue
+    // would report a system fault instead of a full day.
+    { isolationLevel: 'ReadCommitted', maxWait: 15_000, timeout: 15_000 },
   );
 }
 

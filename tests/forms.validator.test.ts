@@ -16,12 +16,11 @@ describe('parts table follows its declared columns', () => {
   const repair = FORM_TEMPLATES_CURRENT.REPAIR;
   const validator = buildValidator(repair);
 
+  // Exactly what FormRenderer sends: only the keys the technician touched.
+  // Sections they never opened — acUnit, symptoms, note, warranty — are absent
+  // entirely, not present-and-empty.
   const base = {
     customer: { customerName: 'ลูกค้า', tel: '0812345678' },
-    acUnit: {},
-    symptoms: {},
-    note: {},
-    warranty: {},
     photosBefore: ['before.jpg'],
     photosAfter: ['after.jpg'],
     inspectorSign: { inspectorSignature: 'sig-a' },
@@ -43,10 +42,29 @@ describe('parts table follows its declared columns', () => {
     expect(validator.safeParse({ ...base, parts: [] }).success).toBe(true);
   });
 
+  it('accepts a form whose untouched sections were never sent at all', () => {
+    // The bug this pins: sections validated as required objects, so a form the
+    // technician filled correctly was rejected with errors naming whole
+    // sections — which says nothing about which box to fill.
+    const result = validator.safeParse({ ...base, parts: [] });
+    expect(result.success).toBe(true);
+  });
+
   it('still rejects a form that is missing a required signature', () => {
     const { technicianSign: _omitted, ...withoutSignature } = base;
     const result = validator.safeParse({ ...withoutSignature, parts: [] });
     expect(result.success).toBe(false);
+  });
+
+  it('reports a missing required field at section.field, not at the section', () => {
+    const result = validator.safeParse({ ...base, customer: { customerName: 'ไม่ใส่เบอร์' } });
+    expect(result.success).toBe(false);
+
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join('.'));
+      // 'customer.tel' is actionable; a bare 'customer' is not.
+      expect(paths).toContain('customer.tel');
+    }
   });
 });
 

@@ -138,7 +138,16 @@ export interface FormSchema {
 function fieldValidator(field: FormField): z.ZodTypeAny {
   switch (field.kind) {
     case 'section':
-      return z.object(Object.fromEntries(field.fields.map((f) => [f.key, fieldValidator(f)])));
+      // A section is a container, not an answer. The renderer only writes keys
+      // the technician actually touches, so an untouched section is absent
+      // rather than empty — validating it as a required object rejected the
+      // form with errors naming whole sections, which tells nobody what to fix.
+      // Treating absent as {} keeps the required fields INSIDE it enforced,
+      // and reports them at section.field where the renderer can mark them.
+      return z.preprocess(
+        (v) => v ?? {},
+        z.object(Object.fromEntries(field.fields.map((f) => [f.key, fieldValidator(f)]))),
+      );
     case 'number': {
       let s = z.number();
       if (field.min !== undefined) s = s.min(field.min);
