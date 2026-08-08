@@ -52,6 +52,11 @@ export default async function PricingPage() {
               <p className="text-[11px] text-[var(--color-muted)]">
                 ราคายังไม่รวม VAT 7% · เวลามาตรฐานใช้เป็นฐานคำนวณโควตาเป็นนาทีช่าง
               </p>
+              <p className="text-[11px] text-[var(--color-muted)] mt-1">
+                <strong>ต่ำสุด–สูงสุด คือช่วงราคาที่ใช้เสนอลูกค้า ไม่ใช่ราคาแยกตามประเภทลูกค้า</strong> —
+                ราคาจริงขึ้นกับสภาพหน้างาน ความยากง่าย ความสูง และจำนวนเครื่อง (จำนวนมากราคาต่อเครื่องลดลง)
+                ระบบจึงไม่เลือกตัวเลขให้เอง เจ้าหน้าที่เป็นผู้ระบุราคาที่ตกลงกับลูกค้า
+              </p>
             </header>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[860px]">
@@ -62,13 +67,13 @@ export default async function PricingPage() {
                     <th className="px-3 py-2 font-normal">ประเภทงาน</th>
                     <th className="px-3 py-2 font-normal text-right">เวลา</th>
                     <th className="px-3 py-2 font-normal text-center">ช่าง</th>
-                    <th className="px-3 py-2 font-normal text-right">ในสัญญา</th>
-                    <th className="px-3 py-2 font-normal text-right">ทั่วไป</th>
+                    <th className="px-3 py-2 font-normal text-right">ราคาต่ำสุด</th>
+                    <th className="px-3 py-2 font-normal text-right">ราคาสูงสุด</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.services.map((s) => {
-                    const noPrice = Number(s.priceStandard) === 0;
+                    const noPrice = Number(s.priceMax) === 0;
                     return (
                       <tr key={s.id} className="border-b border-[var(--color-line)] last:border-0">
                         <td className="px-3 py-2 font-mono text-[11px] text-[var(--color-brand-blue-600)]">{s.code}</td>
@@ -77,10 +82,10 @@ export default async function PricingPage() {
                         <td className="px-3 py-2 text-right text-xs">{formatMinutes(s.standardDurationMin)}</td>
                         <td className="px-3 py-2 text-center text-xs">{s.crewSize}</td>
                         <td className="px-3 py-2 text-right font-mono text-xs">
-                          {noPrice ? <span className="assumption-badge">รอราคา</span> : formatTHB(Number(s.priceContract))}
+                          {noPrice ? <span className="assumption-badge">รอราคา</span> : formatTHB(Number(s.priceMin))}
                         </td>
                         <td className="px-3 py-2 text-right font-mono text-xs">
-                          {noPrice ? '—' : formatTHB(Number(s.priceStandard))}
+                          {noPrice ? '—' : formatTHB(Number(s.priceMax))}
                         </td>
                       </tr>
                     );

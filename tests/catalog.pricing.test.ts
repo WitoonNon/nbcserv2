@@ -23,6 +23,7 @@ const PRICE_LIST: { acType: AcType; th: string; low: number; high: number; minut
   { acType: 'STANDING', th: 'ตู้ตั้ง', low: 900, high: 1200, minutes: 40 },
   { acType: 'CASSETTE_4WAY', th: 'ฝังฝ้าสี่ทิศทาง', low: 900, high: 1400, minutes: 60 },
   { acType: 'CASSETTE_1WAY', th: 'ฝังฝ้าทิศทางเดียว', low: 900, high: 1100, minutes: 60 },
+  { acType: 'CONCEALED', th: 'เปลือยซ่อนฝ้า', low: 800, high: 1100, minutes: 90 },
   { acType: 'AHU', th: 'AHU', low: 1800, high: 6500, minutes: 240 },
 ];
 
@@ -43,18 +44,32 @@ describe('published cleaning prices', () => {
   });
 
   it('quotes nothing for a machine type the client has not priced yet', async () => {
-    // เปลือยซ่อนฝ้า was added to the customer's list without a price. Showing
-    // ฿0 on a public booking page would read as "free", so the absence has to
-    // survive as null all the way to the UI.
+    // Chiller has no price from the client. Showing ฿0 on a public booking
+    // page would read as "free", so the absence has to survive as null all the
+    // way to the UI.
     const estimate = await estimateBooking({
       category: 'CLEANING_PM',
-      acType: 'CONCEALED',
+      acType: 'CHILLER',
       unitCount: 1,
     });
 
     expect(estimate.priceRange).toBeNull();
-    expect(estimate.estimatedTotal).toBeNull();
-    expect(estimate.minutesPerUnit).toBe(90);
+  });
+
+  it('never collapses the band to a single number', async () => {
+    // The band is a quotation range driven by site access, height and volume —
+    // judgements nobody has made yet when a customer is looking at the booking
+    // page. Anything that picked one figure here would be quoting a price the
+    // office cannot honour.
+    const estimate = await estimateBooking({
+      category: 'CLEANING_PM',
+      acType: 'CEILING',
+      unitCount: 10,
+    });
+
+    expect(estimate.priceRange).toEqual({ low: 900, high: 1100 });
+    expect(estimate).not.toHaveProperty('unitPrice');
+    expect(estimate).not.toHaveProperty('estimatedTotal');
   });
 
   it('keeps exactly one active catalogue row per cleaning machine type', async () => {

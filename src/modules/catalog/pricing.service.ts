@@ -4,13 +4,22 @@ import type { AcType, JobSize, PricingTier, ServiceCategory } from '@/generated/
 /**
  * Pricing resolver.
  *
- * NBC publishes every line item twice — contract customer vs non-contract
- * (e.g. wall type ฿500 vs ฿650). Price is therefore never stored flat on a
- * job; it is resolved from the catalogue against the customer's tier and the
- * date, so a work order printed last year still reproduces last year's price.
+ * NBC publishes a price RANGE per line item (e.g. แขวน ฿900–1,100). The
+ * client confirmed on 9 ส.ค. 2569 what that range means: the final figure
+ * depends on the site — how awkward the unit is to reach, working height, and
+ * total quantity, where a bigger job costs LESS per unit.
  *
- * @client-confirm D1 (real internal price list), D2 (tiers still current),
- *                 B7 (VAT inclusive or exclusive)
+ * That means this module deliberately CANNOT return a single price. There is
+ * no rule that collapses the band, because the inputs (access, height, volume
+ * discount) are judgements made at the site, not data we hold. Anything that
+ * needs one number gets it from a human quotation, and the charge records it.
+ *
+ * An earlier reading treated the two figures as ลูกค้าในสัญญา vs ลูกค้าทั่วไป.
+ * They are not: quoting the low number to every contract customer would have
+ * under-billed the hard jobs and over-billed the easy ones.
+ *
+ * @client-confirm D1 (real internal price list), B7 (VAT inclusive or
+ *                 exclusive), D6 (how volume discount is actually calculated)
  */
 
 export interface PriceQuery {
@@ -18,7 +27,6 @@ export interface PriceQuery {
   acType?: AcType | null;
   btu?: number | null;
   jobSize?: JobSize;
-  tier: PricingTier;
   /** Defaults to now; pass the job date to reproduce historical pricing. */
   asOf?: Date;
 }
@@ -27,14 +35,11 @@ export interface ResolvedPrice {
   serviceCatalogItemId: string;
   code: string;
   nameTh: string;
-  unitPrice: number;
-  /** Both tiers, so a public page can quote the published range without
-   *  knowing yet whether the caller is a contract customer. */
-  priceContract: number;
-  priceStandard: number;
+  /** Published band per unit. Equal values mean a genuinely fixed price. */
+  priceMin: number;
+  priceMax: number;
   standardDurationMin: number;
   crewSize: number;
-  tier: PricingTier;
 }
 
 export async function resolvePrice(q: PriceQuery): Promise<ResolvedPrice | null> {
@@ -63,22 +68,29 @@ export async function resolvePrice(q: PriceQuery): Promise<ResolvedPrice | null>
 
   if (!match) return null;
 
+  const low = Number(match.priceMin);
+  const high = Number(match.priceMax);
+
   return {
     serviceCatalogItemId: match.id,
     code: match.code,
     nameTh: match.nameTh,
-    unitPrice: Number(q.tier === 'CONTRACT' ? match.priceContract : match.priceStandard),
-    priceContract: Number(match.priceContract),
-    priceStandard: Number(match.priceStandard),
+    // Ordered defensively: a row entered with the figures the wrong way round
+    // would otherwise print "1,100–900" on a public page.
+    priceMin: Math.min(low, high),
+    priceMax: Math.max(low, high),
     standardDurationMin: match.standardDurationMin,
     crewSize: match.crewSize,
-    tier: q.tier,
   };
 }
 
 /**
  * The tier that applies to a customer right now: an active contract wins,
  * otherwise the customer's default.
+ *
+ * Still meaningful for contract entitlements — the free diagnostic visit is
+ * decided by this — but it no longer selects a price column, because the
+ * published range is not a tier split. See the note at the top of this file.
  */
 export async function resolveTier(customerId: string, asOf = new Date()): Promise<PricingTier> {
   const contract = await prisma.contract.findFirst({

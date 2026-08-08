@@ -36,14 +36,16 @@ export interface BookingEstimate {
   unitCount: number;
   minutesPerUnit: number;
   totalMinutes: number;
-  unitPrice: number | null;
-  estimatedTotal: number | null;
   serviceName: string | null;
   /**
-   * The published two-tier range for one unit: contract price to standard
-   * price. A public visitor is not yet known to be a contract customer, so
-   * quoting one number would be wrong for half the audience.
-   * Null when the client has not given a price for this machine type yet.
+   * Published band for ONE unit.
+   *
+   * Deliberately not collapsed to a single figure: the client confirmed the
+   * band reflects site conditions — access, working height and total quantity,
+   * with bulk lowering the per-unit price. Showing one number here would be a
+   * quote we cannot honour before anyone has seen the site.
+   *
+   * Null when the client has not priced this machine type yet.
    */
   priceRange: { low: number; high: number } | null;
 }
@@ -65,25 +67,20 @@ export async function estimateBooking(params: {
   const price = await resolvePrice({
     category: params.category,
     acType: params.acType ?? null,
-    tier: 'STANDARD',
   });
 
   const minutesPerUnit = price?.standardDurationMin ?? 60;
 
   // A zero price means the client has not quoted this machine type yet, not
   // that the service is free — surface it as "ask us", never as ฿0.
-  const hasPrice = Boolean(price && (price.priceContract > 0 || price.priceStandard > 0));
+  const hasPrice = Boolean(price && price.priceMax > 0);
 
   return {
     unitCount,
     minutesPerUnit,
     totalMinutes: minutesPerUnit * unitCount,
-    unitPrice: hasPrice ? price!.unitPrice : null,
-    estimatedTotal: hasPrice ? price!.unitPrice * unitCount : null,
     serviceName: price?.nameTh ?? null,
-    priceRange: hasPrice
-      ? { low: Math.min(price!.priceContract, price!.priceStandard), high: Math.max(price!.priceContract, price!.priceStandard) }
-      : null,
+    priceRange: hasPrice ? { low: price!.priceMin, high: price!.priceMax } : null,
   };
 }
 

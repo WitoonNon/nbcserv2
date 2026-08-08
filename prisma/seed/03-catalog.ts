@@ -9,8 +9,18 @@ import type { AcType, JobSize, ServiceCategory } from '../../src/generated/prism
  * demoable to the client on day one, and every placeholder is a number they
  * will recognise as their own.
  *
+ * priceMin/priceMax are a QUOTATION BAND, not a customer-tier split. The
+ * client confirmed on 9 ส.ค. 2569 that the final figure depends on the site —
+ * access difficulty, working height, and total quantity, with a bigger job
+ * costing LESS per unit. Nothing in this file should ever be read as "contract
+ * customers pay priceMin".
+ *
  * @client-confirm D1 — replace with the internal price list actually in use.
  * @client-confirm D3 — confirm the standard durations.
+ * @client-confirm D6 — how the volume discount is actually calculated. The
+ *                      client says bulk lowers the per-unit price but has not
+ *                      given the thresholds, so the system quotes the band and
+ *                      leaves the final number to the office.
  * @client-confirm C4 — jobSize mapping is our assumption; the client defines
  *                      their own size bands.
  */
@@ -25,8 +35,8 @@ interface CatalogRow {
   nameTh: string;
   nameEn: string;
   durationMin: number;
-  priceContract: number;
-  priceStandard: number;
+  priceMin: number;
+  priceMax: number;
   crewSize: number;
 }
 
@@ -36,13 +46,13 @@ const CLEANING: CatalogRow[] = [
     code: 'CLEAN-WALL-24K', category: 'CLEANING_PM', acType: 'WALL', jobSize: 'S',
     btuMin: 0, btuMax: 24000,
     nameTh: 'ล้างแอร์ติดผนัง 0–24,000 BTU', nameEn: 'Clean wall type 0–24,000 BTU',
-    durationMin: 30, priceContract: 500, priceStandard: 650, crewSize: 2,
+    durationMin: 30, priceMin: 500, priceMax: 650, crewSize: 2,
   },
   {
     code: 'CLEAN-WALL-36K', category: 'CLEANING_PM', acType: 'WALL', jobSize: 'S',
     btuMin: 24001, btuMax: 36000,
     nameTh: 'ล้างแอร์ติดผนัง 24,001–36,000 BTU', nameEn: 'Clean wall type 24,001–36,000 BTU',
-    durationMin: 30, priceContract: 500, priceStandard: 650, crewSize: 2,
+    durationMin: 30, priceMin: 500, priceMax: 650, crewSize: 2,
   },
 
   // --- แอร์แขวน / Ceiling type — 40 min ---
@@ -51,19 +61,19 @@ const CLEANING: CatalogRow[] = [
     code: 'CLEAN-CEIL-24K', category: 'CLEANING_PM', acType: 'CEILING', jobSize: 'M',
     btuMin: 0, btuMax: 24000,
     nameTh: 'ล้างแอร์แขวน 0–24,000 BTU', nameEn: 'Clean ceiling type 0–24,000 BTU',
-    durationMin: 40, priceContract: 900, priceStandard: 1100, crewSize: 2,
+    durationMin: 40, priceMin: 900, priceMax: 1100, crewSize: 2,
   },
   {
     code: 'CLEAN-CEIL-36K', category: 'CLEANING_PM', acType: 'CEILING', jobSize: 'M',
     btuMin: 24001, btuMax: 36000,
     nameTh: 'ล้างแอร์แขวน 24,001–36,000 BTU', nameEn: 'Clean ceiling type 24,001–36,000 BTU',
-    durationMin: 40, priceContract: 900, priceStandard: 1100, crewSize: 2,
+    durationMin: 40, priceMin: 900, priceMax: 1100, crewSize: 2,
   },
   {
     code: 'CLEAN-CEIL-40KUP', category: 'CLEANING_PM', acType: 'CEILING', jobSize: 'M',
     btuMin: 40001, btuMax: null,
     nameTh: 'ล้างแอร์แขวน 40,001 BTU ขึ้นไป', nameEn: 'Clean ceiling type 40,001 BTU+',
-    durationMin: 40, priceContract: 900, priceStandard: 1100, crewSize: 2,
+    durationMin: 40, priceMin: 900, priceMax: 1100, crewSize: 2,
   },
 
   // --- แอร์ตู้ตั้ง / Standing type — 40 min ---
@@ -72,19 +82,19 @@ const CLEANING: CatalogRow[] = [
     code: 'CLEAN-STAND-24K', category: 'CLEANING_PM', acType: 'STANDING', jobSize: 'M',
     btuMin: 0, btuMax: 24000,
     nameTh: 'ล้างแอร์ตู้ตั้ง 0–24,000 BTU', nameEn: 'Clean standing type 0–24,000 BTU',
-    durationMin: 40, priceContract: 900, priceStandard: 1200, crewSize: 2,
+    durationMin: 40, priceMin: 900, priceMax: 1200, crewSize: 2,
   },
   {
     code: 'CLEAN-STAND-36K', category: 'CLEANING_PM', acType: 'STANDING', jobSize: 'M',
     btuMin: 24001, btuMax: 36000,
     nameTh: 'ล้างแอร์ตู้ตั้ง 24,001–36,000 BTU', nameEn: 'Clean standing type 24,001–36,000 BTU',
-    durationMin: 40, priceContract: 900, priceStandard: 1200, crewSize: 2,
+    durationMin: 40, priceMin: 900, priceMax: 1200, crewSize: 2,
   },
   {
     code: 'CLEAN-STAND-40KUP', category: 'CLEANING_PM', acType: 'STANDING', jobSize: 'M',
     btuMin: 40001, btuMax: null,
     nameTh: 'ล้างแอร์ตู้ตั้ง 40,001 BTU ขึ้นไป', nameEn: 'Clean standing type 40,001 BTU+',
-    durationMin: 40, priceContract: 900, priceStandard: 1200, crewSize: 2,
+    durationMin: 40, priceMin: 900, priceMax: 1200, crewSize: 2,
   },
 
   // --- แอร์ฝังฝ้า 4 ทิศทาง / Cassette 4-way — 60 min ---
@@ -93,7 +103,7 @@ const CLEANING: CatalogRow[] = [
     code: 'CLEAN-CAS4', category: 'CLEANING_PM', acType: 'CASSETTE_4WAY', jobSize: 'M',
     btuMin: null, btuMax: null,
     nameTh: 'ล้างแอร์ฝังฝ้า 4 ทิศทาง', nameEn: 'Clean cassette 4-way',
-    durationMin: 60, priceContract: 900, priceStandard: 1400, crewSize: 2,
+    durationMin: 60, priceMin: 900, priceMax: 1400, crewSize: 2,
   },
 
   // --- แอร์ฝังฝ้าทิศทางเดียว / Cassette 1-way — 60 min ---
@@ -102,18 +112,16 @@ const CLEANING: CatalogRow[] = [
     code: 'CLEAN-CAS1', category: 'CLEANING_PM', acType: 'CASSETTE_1WAY', jobSize: 'M',
     btuMin: null, btuMax: null,
     nameTh: 'ล้างแอร์ฝังฝ้าทิศทางเดียว', nameEn: 'Clean cassette 1-way',
-    durationMin: 60, priceContract: 900, priceStandard: 1100, crewSize: 2,
+    durationMin: 60, priceMin: 900, priceMax: 1100, crewSize: 2,
   },
 
   // --- แอร์เปลือยซ่อนฝ้า / Concealed ducted — 90 min ---
-  // @client-confirm D5 — the client added this type on 5 ส.ค. 2569 but did not
-  // quote a price for it. Zero renders as "สอบถามเจ้าหน้าที่" rather than as
-  // free, which is the safe way to be missing a price on a public page.
+  // Client-confirmed 9 ส.ค. 2569: ฿800–1,100.
   {
     code: 'CLEAN-CONC', category: 'CLEANING_PM', acType: 'CONCEALED', jobSize: 'L',
     btuMin: null, btuMax: null,
     nameTh: 'ล้างแอร์เปลือยซ่อนฝ้า', nameEn: 'Clean concealed ducted',
-    durationMin: 90, priceContract: 0, priceStandard: 0, crewSize: 2,
+    durationMin: 90, priceMin: 800, priceMax: 1100, crewSize: 2,
   },
 
   // แอร์ซ่อนในฝ้า เล็ก/ใหญ่ (CLEAN-CONC-SM-24K, CLEAN-CONC-LG-36K,
@@ -130,19 +138,19 @@ const CLEANING: CatalogRow[] = [
     code: 'CLEAN-AHU', category: 'CLEANING_PM', acType: 'AHU', jobSize: 'XL',
     btuMin: null, btuMax: null,
     nameTh: 'ล้าง/บำรุงรักษา AHU', nameEn: 'AHU cleaning & maintenance',
-    durationMin: 240, priceContract: 1800, priceStandard: 6500, crewSize: 3,
+    durationMin: 240, priceMin: 1800, priceMax: 6500, crewSize: 3,
   },
   {
     code: 'CLEAN-CHILLER', category: 'CLEANING_PM', acType: 'CHILLER', jobSize: 'XL',
     btuMin: null, btuMax: null,
     nameTh: 'ล้าง/บำรุงรักษา Chiller', nameEn: 'Chiller cleaning & maintenance',
-    durationMin: 480, priceContract: 0, priceStandard: 0, crewSize: 3,
+    durationMin: 480, priceMin: 0, priceMax: 0, crewSize: 3,
   },
   {
     code: 'CLEAN-VRF', category: 'CLEANING_PM', acType: 'VRV_VRF', jobSize: 'XL',
     btuMin: null, btuMax: null,
     nameTh: 'ล้าง/บำรุงรักษาระบบ VRV/VRF', nameEn: 'VRV/VRF cleaning & maintenance',
-    durationMin: 180, priceContract: 0, priceStandard: 0, crewSize: 3,
+    durationMin: 180, priceMin: 0, priceMax: 0, crewSize: 3,
   },
 ];
 
@@ -152,25 +160,25 @@ const OTHER_SERVICES: CatalogRow[] = [
     code: 'INSPECT-STANDARD', category: 'INSPECTION_REPAIR', acType: 'OTHER', jobSize: 'S',
     btuMin: null, btuMax: null,
     nameTh: 'ตรวจเช็คหน้างาน', nameEn: 'On-site inspection',
-    durationMin: 60, priceContract: 0, priceStandard: 500, crewSize: 1,
+    durationMin: 60, priceMin: 0, priceMax: 500, crewSize: 1,
   },
   {
     code: 'REPAIR-LABOUR-BASIC', category: 'REPAIR', acType: 'OTHER', jobSize: 'S',
     btuMin: null, btuMax: null,
     nameTh: 'ค่าแรงซ่อมทั่วไป', nameEn: 'Standard repair labour',
-    durationMin: 90, priceContract: 800, priceStandard: 1000, crewSize: 2,
+    durationMin: 90, priceMin: 800, priceMax: 1000, crewSize: 2,
   },
   {
     code: 'REPAIR-LABOUR-MAJOR', category: 'REPAIR', acType: 'OTHER', jobSize: 'L',
     btuMin: null, btuMax: null,
     nameTh: 'ค่าแรงซ่อมใหญ่ (คอมเพรสเซอร์/ระบบน้ำยา)', nameEn: 'Major repair labour',
-    durationMin: 240, priceContract: 2500, priceStandard: 3000, crewSize: 2,
+    durationMin: 240, priceMin: 2500, priceMax: 3000, crewSize: 2,
   },
   {
     code: 'INSTALL-WALL-STD', category: 'INSTALLATION', acType: 'WALL', jobSize: 'M',
     btuMin: 0, btuMax: 24000,
     nameTh: 'ติดตั้งแอร์ติดผนัง (ท่อน้ำยา 4 เมตร)', nameEn: 'Wall type installation (4m line set)',
-    durationMin: 180, priceContract: 3000, priceStandard: 3000, crewSize: 2,
+    durationMin: 180, priceMin: 3000, priceMax: 3000, crewSize: 2,
   },
 ];
 
@@ -221,14 +229,14 @@ export async function seedCatalog() {
         nameTh: row.nameTh,
         nameEn: row.nameEn,
         standardDurationMin: row.durationMin,
-        priceContract: row.priceContract,
-        priceStandard: row.priceStandard,
+        priceMin: row.priceMin,
+        priceMax: row.priceMax,
         crewSize: row.crewSize,
         activeFrom,
       },
       update: {
-        priceContract: row.priceContract,
-        priceStandard: row.priceStandard,
+        priceMin: row.priceMin,
+        priceMax: row.priceMax,
         standardDurationMin: row.durationMin,
       },
     });
