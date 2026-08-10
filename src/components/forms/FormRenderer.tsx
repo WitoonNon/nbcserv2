@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { FormField, FormSchema } from '@/lib/forms/types';
+import { PhotoGroupInput } from './PhotoGroupInput';
 
 /**
  * Renders any FormTemplate schema.
@@ -42,9 +43,11 @@ interface FieldProps {
   setValue: (k: string, v: unknown) => void;
   errors: Record<string, string>;
   readOnly: boolean;
+  /** Absent on the blank-template preview, which has nothing to attach to. */
+  workOrderId?: string;
 }
 
-function Field({ field, values, setValue, errors, readOnly }: FieldProps) {
+function Field({ field, values, setValue, errors, readOnly, workOrderId }: FieldProps) {
   if (field.visibleWhen) {
     const current = values[field.visibleWhen.key];
     if (!field.visibleWhen.equals.includes(current as string)) return null;
@@ -54,7 +57,15 @@ function Field({ field, values, setValue, errors, readOnly }: FieldProps) {
   const errorRing = error ? ' !border-[var(--color-status-cancelled)]' : '';
 
   switch (field.kind) {
-    case 'section':
+    case 'section': {
+      // A section is a nested object in the payload, which is how the validator
+      // reads it (`customer.tel`) and how a section named the same as a field
+      // stays unambiguous. Children therefore see the section's own slice, not
+      // the whole payload — writing them flat produced a payload the validator
+      // could never accept, so every submit failed on fields that were filled.
+      const inner = (values[field.key] as Record<string, unknown>) ?? {};
+      const setInner = (k: string, v: unknown) => setValue(field.key, { ...inner, [k]: v });
+
       return (
         <fieldset className="card overflow-hidden">
           <legend className="sr-only">{field.labelTh}</legend>
@@ -65,12 +76,14 @@ function Field({ field, values, setValue, errors, readOnly }: FieldProps) {
           <div className="p-3 grid gap-3 sm:grid-cols-2">
             {field.fields.map((f) => (
               <div key={f.key} className={f.kind === 'textarea' || f.kind === 'multiselect' ? 'sm:col-span-2' : ''}>
-                <Field field={f} values={values} setValue={setValue} errors={errors} readOnly={readOnly} />
+                <Field field={f} values={inner} setValue={setInner} errors={errors}
+                  readOnly={readOnly} workOrderId={workOrderId} />
               </div>
             ))}
           </div>
         </fieldset>
       );
+    }
 
     case 'textarea':
       return (
@@ -220,28 +233,47 @@ function Field({ field, values, setValue, errors, readOnly }: FieldProps) {
       );
     }
 
-    // Photo upload and signature capture land in 2.2 and 2.3. Until the storage
-    // adapter is real these render as placeholders, but the payload keys they
-    // will write are already validated, so nothing about saving changes then.
-    case 'photoGroup':
+    case 'photoGroup': {
+      // The blank-template preview at /work-orders/[code] has no work order to
+      // attach anything to, so it keeps showing the empty frames.
+      if (!workOrderId) {
+        return (
+          <div>
+            <Label field={field} />
+            <div className="flex gap-2 flex-wrap">
+              {[0, 1, 2].map((i) => (
+                <div key={i}
+                  className="size-20 border-2 border-dashed border-[var(--color-line)] rounded grid place-items-center text-[var(--color-muted)] text-2xl">
+                  +
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-[var(--color-muted)] mt-1">
+              แนบรูปได้เมื่อเปิดใบงานจริง
+              {field.minCount ? ` · ต้องมีอย่างน้อย ${field.minCount} รูป` : ''}
+            </p>
+          </div>
+        );
+      }
+
+      const stored = Array.isArray(values[field.key]) ? (values[field.key] as string[]) : [];
       return (
         <div>
           <Label field={field} />
-          <div className="flex gap-2 flex-wrap">
-            {[0, 1, 2].map((i) => (
-              <div key={i}
-                className="size-20 border-2 border-dashed border-[var(--color-line)] rounded grid place-items-center text-[var(--color-muted)] text-2xl">
-                +
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-[var(--color-muted)] mt-1">
-            แนบรูปได้ในเวอร์ชันถัดไป
-            {field.minCount ? ` · ต้องมีอย่างน้อย ${field.minCount} รูป` : ''}
-          </p>
-          <FieldError message={error} />
+          <PhotoGroupInput
+            field={field}
+            workOrderId={workOrderId}
+            value={stored}
+            // An empty group is absent from the payload rather than an empty
+            // array — the same "untouched means unsent" rule the validator
+            // relies on for sections and checklists.
+            onChange={(keys) => setValue(field.key, keys.length ? keys : undefined)}
+            readOnly={readOnly}
+            error={error}
+          />
         </div>
       );
+    }
 
     case 'signature':
       return (
@@ -317,12 +349,15 @@ export function FormRenderer({
   onChange,
   errors = {},
   readOnly = false,
+  workOrderId,
 }: {
   schema: FormSchema;
   values?: Record<string, unknown>;
   onChange?: (next: Record<string, unknown>) => void;
   errors?: Record<string, string>;
   readOnly?: boolean;
+  /** Which work order photographs attach to. Omitted by the template preview. */
+  workOrderId?: string;
 }) {
   const [internal, setInternal] = useState<Record<string, unknown>>({});
   const values = controlled ?? internal;
@@ -337,7 +372,7 @@ export function FormRenderer({
     <div className="space-y-3">
       {schema.fields.map((f) => (
         <Field key={f.key} field={f} values={values} setValue={setValue}
-          errors={errors} readOnly={readOnly} />
+          errors={errors} readOnly={readOnly} workOrderId={workOrderId} />
       ))}
     </div>
   );

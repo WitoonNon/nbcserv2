@@ -108,6 +108,7 @@ export function WorkOrderEditor({
         onChange={setPayload}
         errors={submitState.fieldErrors ?? {}}
         readOnly={readOnly}
+        workOrderId={workOrder.id}
       />
 
       <div className="card p-4 space-y-3">

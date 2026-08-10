@@ -1,0 +1,131 @@
+import 'server-only';
+import { randomUUID } from 'node:crypto';
+import { prisma } from '@/lib/db';
+import type { AttachmentKind } from '@/generated/prisma';
+import { mediaKey, storage } from '@/lib/storage';
+
+/**
+ * Field photographs (Phase 2.2).
+ *
+ * A photo is evidence: it is what settles "the drain was already cracked when
+ * we arrived". So the rules here are about what may be attached and when, not
+ * about file handling.
+ *
+ * 1. Attachments belong to a work order that is still being filled in. Once a
+ *    form is SUBMITTED the technician's account can no longer change what the
+ *    supervisor is looking at, and an APPROVED form is frozen outright — the
+ *    same rule the payload already follows.
+ *
+ * 2. Removing a photo from a form removes its key from the payload; the
+ *    Attachment row and the stored object stay. Deleting the evidence of a
+ *    visit because someone tapped the wrong thumbnail is not recoverable, and
+ *    an orphaned object costs a few kilobytes.
+ *
+ * 3. The bucket is private. Bytes are only ever served through the route that
+ *    checks the session, or as a short-lived signed URL.
+ */
+
+export class MediaError extends Error {
+  constructor(
+    message: string,
+    readonly status: number = 400,
+  ) {
+    super(message);
+    this.name = 'MediaError';
+  }
+}
+
+/**
+ * The client downscales before uploading, so anything approaching this ceiling
+ * did not come from our own form. It is a backstop against a hostile caller,
+ * not a limit technicians should ever meet.
+ */
+export const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
+
+/** Extension by mime — the client's filename is never trusted to name the file. */
+const ALLOWED_IMAGE_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
+const ATTACHABLE_STATUSES = new Set(['DRAFT', 'RETURNED']);
+
+export interface AttachResult {
+  id: string;
+  /** The storage key. This is what goes into the form payload. */
+  key: string;
+  /** Where the browser can fetch it back. */
+  url: string;
+  bytes: number;
+}
+
+export async function attachToWorkOrder(params: {
+  workOrderId: string;
+  kind: AttachmentKind;
+  mime: string;
+  body: Buffer;
+  actorId?: string | null;
+  caption?: string | null;
+}): Promise<AttachResult> {
+  const ext = ALLOWED_IMAGE_MIME[params.mime];
+  if (!ext) {
+    throw new MediaError('รองรับเฉพาะไฟล์รูปภาพ JPEG, PNG หรือ WebP เท่านั้น', 415);
+  }
+  if (params.body.byteLength === 0) throw new MediaError('ไฟล์ว่างเปล่า');
+  if (params.body.byteLength > MAX_UPLOAD_BYTES) {
+    throw new MediaError('ไฟล์ใหญ่เกินไป — ลองถ่ายใหม่หรือย่อรูปก่อนอัปโหลด', 413);
+  }
+
+  const workOrder = await prisma.workOrder.findUnique({
+    where: { id: params.workOrderId },
+    select: { id: true, status: true },
+  });
+  if (!workOrder) throw new MediaError('ไม่พบใบงาน', 404);
+  if (!ATTACHABLE_STATUSES.has(workOrder.status)) {
+    throw new MediaError('ใบงานนี้ส่งแล้ว แนบรูปเพิ่มไม่ได้ — ต้องให้หัวหน้างานตีกลับก่อน', 409);
+  }
+
+  // The uploader's filename is discarded outright. It reaches the local
+  // driver's filesystem path, and it is the one part of an upload a caller
+  // controls completely.
+  const key = mediaKey({
+    entityType: 'WorkOrder',
+    entityId: workOrder.id,
+    kind: params.kind,
+    filename: `${randomUUID()}.${ext}`,
+  });
+
+  const stored = await storage().put(key, params.body, params.mime);
+
+  // Written after the object exists: a row pointing at bytes that were never
+  // stored would render as a permanently broken thumbnail.
+  const attachment = await prisma.attachment.create({
+    data: {
+      entityType: 'WorkOrder',
+      entityId: workOrder.id,
+      kind: params.kind,
+      storageKey: stored.key,
+      mime: params.mime,
+      bytes: stored.bytes,
+      sha256: stored.sha256,
+      caption: params.caption ?? null,
+      uploadedById: params.actorId ?? null,
+    },
+    select: { id: true },
+  });
+
+  return { id: attachment.id, key: stored.key, url: mediaUrl(stored.key), bytes: stored.bytes };
+}
+
+/** The app-relative URL for a stored key — always goes through the auth check. */
+export function mediaUrl(key: string): string {
+  return `/api/media/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+export async function findAttachmentByKey(key: string) {
+  return prisma.attachment.findFirst({
+    where: { storageKey: key },
+    select: { id: true, mime: true, bytes: true, entityType: true, entityId: true },
+  });
+}

@@ -9,7 +9,13 @@ try {
 
 export default defineConfig({
   resolve: {
-    alias: { '@': path.resolve(process.cwd(), 'src') },
+    alias: {
+      '@': path.resolve(process.cwd(), 'src'),
+      // Next resolves this marker to an empty module through the `react-server`
+      // export condition; outside Next it resolves to one that throws on
+      // import. See the stub for why that is a bundler concern, not ours.
+      'server-only': path.resolve(process.cwd(), 'tests/stubs/server-only.ts'),
+    },
   },
   test: {
     environment: 'node',
@@ -20,6 +26,9 @@ export default defineConfig({
     // another region. The 10s default is a network-latency tripwire, not a
     // signal that anything is wrong, so it matches testTimeout.
     hookTimeout: 30_000,
-    include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+    // .tsx files are component tests. They opt into jsdom with a
+    // `@vitest-environment jsdom` docblock rather than switching the default,
+    // because every other test talks to Postgres and gains nothing from a DOM.
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx', 'src/**/*.test.ts'],
   },
 });
