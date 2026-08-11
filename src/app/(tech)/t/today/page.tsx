@@ -1,9 +1,12 @@
+import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatThaiDate } from '@/lib/date/buddhist';
 import { formatMinutes } from '@/lib/utils';
 import { requireUser } from '@/lib/auth/guard';
 import { dateOnly } from '@/modules/scheduling/quota.service';
+import { nextStepFor } from '@/modules/jobs/field-work.service';
+import { JobStepButton } from '@/components/tech/JobStepButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +40,14 @@ async function loadQueue(technicianId: string | null) {
           },
         },
       },
-      include: { customer: true, site: true, assets: true },
+      include: {
+        customer: true,
+        // The site's own contact is who the technician should ring — the
+        // person at the door, not head office.
+        site: { include: { contacts: { orderBy: { isPrimary: 'desc' }, take: 1 } } },
+        assets: true,
+        workOrders: { select: { id: true, status: true } },
+      },
       orderBy: [{ priority: 'desc' }, { scheduledWindowFrom: 'asc' }],
       take: 20,
     });
@@ -86,28 +96,54 @@ export default async function TechTodayPage() {
               </p>
               <p className="truncate">{job.problemDescription ?? '—'}</p>
             </div>
-            <div className="grid grid-cols-2 gap-px bg-[var(--color-line)]">
-              <a
-                href={`tel:${job.site.id}`}
-                className="bg-white min-h-[48px] grid place-items-center text-sm font-semibold text-[var(--color-brand-blue-600)]"
-              >
-                โทรหาลูกค้า
-              </a>
-              <button
-                type="button"
-                className="bg-[var(--color-brand-orange)] min-h-[48px] text-white text-sm font-semibold"
-              >
-                เริ่มเดินทาง
-              </button>
-            </div>
+            {(() => {
+              // The number to ring: the site contact, else the customer on
+              // file. This used to be `tel:${job.site.id}`, which dialled a
+              // database id.
+              const phone = job.site.contacts[0]?.phone ?? job.customer.phone;
+              const step = nextStepFor(job.status);
+              const hasPaperwork = job.workOrders.some(
+                (w) => w.status === 'SUBMITTED' || w.status === 'APPROVED',
+              );
+
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-px bg-[var(--color-line)] border-t border-[var(--color-line)]">
+                    {phone ? (
+                      <a
+                        href={`tel:${phone}`}
+                        className="bg-white min-h-[48px] grid place-items-center text-sm font-semibold text-[var(--color-brand-blue-600)]"
+                      >
+                        โทรหาลูกค้า
+                      </a>
+                    ) : (
+                      <span className="bg-white min-h-[48px] grid place-items-center text-sm text-[var(--color-muted)]">
+                        ไม่มีเบอร์ติดต่อ
+                      </span>
+                    )}
+                    <Link
+                      href={`/jobs/${job.id}`}
+                      className="bg-white min-h-[48px] grid place-items-center text-sm font-semibold text-[var(--color-brand-blue-600)]"
+                    >
+                      ใบงาน
+                    </Link>
+                  </div>
+
+                  {step ? (
+                    <JobStepButton jobId={job.id} step={step} warnNoWorkOrder={!hasPaperwork} />
+                  ) : (
+                    <p className="text-center text-xs text-[var(--color-muted)] py-3 border-t border-[var(--color-line)]">
+                      {job.status === 'COMPLETED'
+                        ? 'ปิดงานแล้ว — รอออฟฟิศตรวจ'
+                        : 'ขั้นตอนถัดไปทำที่ออฟฟิศ'}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </li>
         ))}
       </ul>
-
-      {/* Placeholder for the offline sync queue indicator. */}
-      <p className="text-[11px] text-center text-[var(--color-muted)] pt-2">
-        ฟอร์มและรูปที่กรอกไว้ตอนไม่มีสัญญาณ จะถูกส่งอัตโนมัติเมื่อกลับมาออนไลน์
-      </p>
     </div>
   );
 }
