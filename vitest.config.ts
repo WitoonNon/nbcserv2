@@ -19,6 +19,12 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Tests write real files. Once a developer points their .env at Supabase
+    // to try the real thing, every run would otherwise pour throwaway
+    // attachments into the live bucket — so the suite pins itself to the
+    // local driver. storage.supabase.test.ts sets its own env and is
+    // unaffected.
+    env: { STORAGE_DRIVER: 'local' },
     // Concurrency tests hit real Postgres and must not run against each other.
     fileParallelism: false,
     testTimeout: 30_000,

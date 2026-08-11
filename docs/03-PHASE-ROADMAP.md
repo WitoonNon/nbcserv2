@@ -446,9 +446,12 @@ SUPABASE_SERVICE_ROLE_KEY=<service role key>
 SUPABASE_STORAGE_BUCKET=work-orders
 ```
 
-สร้าง bucket ครั้งเดียวที่ Supabase → Storage → New bucket แล้ว **ปิด "Public bucket"**
+bucket `work-orders` **สร้างแล้ว** (Public ปิด) — ไม่ต้องสร้างซ้ำ
 `env()` จะไม่ยอมบูตถ้าตั้ง driver เป็น supabase แล้วไม่มี URL หรือ key — ตั้งใจให้พังตอน deploy
 ดีกว่าไปพังตอนช่างยืนอยู่บนดาดฟ้า
+
+> ชุดเทสต์ pin `STORAGE_DRIVER=local` ไว้ใน `vitest.config.ts` เอง ดังนั้นต่อให้ `.env`
+> ชี้ไป supabase อยู่ `npm test` ก็จะไม่เทขยะลงบัคเก็ตจริง
 
 ### 🐛 บั๊กที่เจอและแก้ระหว่างทำข้อนี้
 
@@ -465,15 +468,37 @@ SUPABASE_STORAGE_BUCKET=work-orders
 > นี่คือบั๊กตระกูลเดียวกับบั๊ก 4 ในข้อ 2.1 เป๊ะ ๆ และหลุดมาด้วยเหตุผลเดียวกัน
 > **เทสต์ฟอร์มที่ไม่ผ่าน renderer จริง พิสูจน์อะไรเรื่องรูปร่าง payload ไม่ได้เลย**
 
+### ✅ ทดสอบกับ Supabase Storage ของจริงแล้ว (11 ส.ค. 2569)
+
+bucket `work-orders` สร้างแล้วในโปรเจกต์ `nbcserv` (`zjcidjfmgnjjkqwiotnk`) · **Public ปิด**
+
+ยิงจาก localhost ด้วย `STORAGE_DRIVER=supabase` แล้วอัปโหลดผ่านหน้าใบงานจริง ผลที่วัดได้:
+
+| ตรวจ | ผล |
+|---|---|
+| อัปโหลด → อ่านกลับ | ไบต์ตรงกัน |
+| signed URL | ได้ 200 · หมดอายุตาม `SUPABASE_SIGNED_URL_TTL` |
+| **เข้าทาง public โดยไม่มี credential** | **ถูกปฏิเสธ** — bucket private จริง |
+| ไฟล์เต็ม + thumbnail | อยู่ใน bucket ทั้งคู่ · 23,367 / 3,105 bytes |
+| EXIF | `exifTakenAt` 09:45Z (= 16:45 ไทย) · `lat` 13.855 · `lng` 100.52 |
+
+> **key ที่ใช้เป็นรูปแบบใหม่ `sb_secret_…` ไม่ใช่ JWT `service_role` แบบเดิม** — ใช้กับ
+> Storage REST API ได้ตามปกติ ทั้ง header `Authorization: Bearer` และ `apikey`
+
+### ⚠️ สลับ driver แล้วไฟล์เก่าอ่านไม่เจอ
+
+ไฟล์ที่อัปตอน `STORAGE_DRIVER=local` อยู่บนดิสก์ที่ `./.storage` ไม่ได้ย้ายตามไปด้วย
+พอสลับเป็น supabase แถว `Attachment` เดิมยังชี้ key เดิมแต่ในบัคเก็ตไม่มีไฟล์นั้น
+
+**route ตอบ 404 ไม่ใช่ 500** — เดิมการ sign ที่ล้มเหลวอยู่นอก `try/catch` เลยกลายเป็น
+error 500 แก้แล้วตอนทดสอบจริงครั้งนี้ ถ้าต้องการย้ายไฟล์เก่าจริงต้องเขียนสคริปต์ migrate เอง
+(ยังไม่มี — ข้อมูลเก่าเป็นแค่ข้อมูลเดโม)
+
 ### ยังไม่ได้ทำในข้อนี้
 
 - ไม่มีการลบไฟล์ในสตอเรจ ไฟล์กำพร้าสะสมไปเรื่อย ๆ (ตั้งใจ ดูกติกาข้อ 4)
-- 🔴 **ยังไม่ได้ยิงใส่ Supabase Storage ของจริง** — ทำไม่ได้จากที่นี่ เพราะต้องมี
-  service-role key กับ bucket ซึ่งสร้างได้เฉพาะเจ้าของโปรเจกต์
-  สิ่งที่ทำแทนคือ `tests/storage.supabase.test.ts` 9 เทสต์ กับ fetch ปลอม
-  ครอบ URL · header · `x-upsert` · การแปลง signed URL · การ encode key
-  **แต่เทสต์ที่ยิง fetch ปลอมพิสูจน์ได้แค่ว่าเราเรียกถูกตามที่เราเข้าใจ**
-  ไม่ได้พิสูจน์ว่า Supabase ตอบแบบนั้นจริง → ยังต้องลองอัปโหลดจริง 1 รูปหลังตั้ง env
+- ยังไม่ได้ตั้ง env บน **Vercel** — production ยังใช้ local driver อยู่
+  (บัญชี Vercel ที่ deploy คือ `touchmecodes-projects` คนละบัญชีกับที่ล็อกอินไว้)
 
 ## 2.3 · ลายเซ็น
 

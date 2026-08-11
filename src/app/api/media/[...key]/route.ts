@@ -46,7 +46,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ key: string[] }
   // would double the bandwidth for no added safety, since the signed URL is
   // only minted after the checks above.
   if (adapter.name !== 'local') {
-    return NextResponse.redirect(await adapter.url(served));
+    try {
+      return NextResponse.redirect(await adapter.url(served));
+    } catch {
+      // Signing fails when the object is not there — which is the normal case
+      // for a row recorded before the storage driver changed, since those
+      // bytes are still sitting on the old driver. That is a missing file,
+      // not a broken server.
+      return NextResponse.json({ error: 'ไม่พบไฟล์' }, { status: 404 });
+    }
   }
 
   try {
