@@ -193,6 +193,41 @@ export function buildValidator(schema: FormSchema): z.ZodTypeAny {
   return z.object(Object.fromEntries(schema.fields.map((f) => [f.key, fieldValidator(f)])));
 }
 
+/**
+ * Write a signature's storage key into the payload at wherever the schema puts
+ * that signer.
+ *
+ * Signing needs the payload INCLUDING the new key, because that is what gets
+ * hashed — and React state has not flushed at the moment the handler runs. The
+ * schema is the only thing that knows the field sits at `technicianSign
+ * .technicianSignature` rather than at the top level, so the path is derived
+ * from it rather than assumed.
+ */
+export function writeSignatureKey(
+  schema: FormSchema,
+  payload: Record<string, unknown>,
+  signerRole: SignatureField['signerRole'],
+  storageKey: string,
+): Record<string, unknown> {
+  const walk = (fields: FormField[], current: Record<string, unknown>): Record<string, unknown> => {
+    let next = current;
+    for (const f of fields) {
+      if (f.kind === 'signature' && f.signerRole === signerRole) {
+        next = { ...next, [f.key]: storageKey };
+      } else if (f.kind === 'section') {
+        const inner = (next[f.key] as Record<string, unknown>) ?? {};
+        const updated = walk(f.fields, inner);
+        // Untouched sections stay absent — the same rule the validator relies
+        // on everywhere else.
+        if (updated !== inner) next = { ...next, [f.key]: updated };
+      }
+    }
+    return next;
+  };
+
+  return walk(schema.fields, payload);
+}
+
 /** Flatten nested sections — used by the PDF renderer and the CSV export. */
 export function flattenFields(schema: FormSchema): FormField[] {
   const out: FormField[] = [];

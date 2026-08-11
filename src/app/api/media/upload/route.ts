@@ -22,6 +22,10 @@ const VALID_KINDS = new Set<AttachmentKind>([
   'DEFECT',
   'NAMEPLATE',
   'SERIAL',
+  // The captured signature image. Storing it as an attachment is only half of
+  // signing — the Signature row that binds it to a payload hash is written by
+  // signWorkOrder().
+  'SIGNATURE',
   'OTHER',
 ]);
 

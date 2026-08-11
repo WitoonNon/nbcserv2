@@ -1,12 +1,15 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { FormRenderer } from '@/components/forms/FormRenderer';
+import { useRouter } from 'next/navigation';
+import { FormRenderer, type SignatureState } from '@/components/forms/FormRenderer';
+import { writeSignatureKey } from '@/lib/forms/types';
 import type { WorkOrderView } from '@/modules/workorders/workorder.service';
 import {
   approveAction,
   returnAction,
   saveDraftAction,
+  signAction,
   submitAction,
   type WorkOrderState,
 } from '@/app/(staff)/work-orders/d/[id]/actions';
@@ -29,6 +32,20 @@ export function WorkOrderEditor({
 }) {
   const [payload, setPayload] = useState<Record<string, unknown>>(workOrder.payload);
   const [showReturn, setShowReturn] = useState(false);
+  const [signMessage, setSignMessage] = useState<string | null>(null);
+  const router = useRouter();
+
+  const signatures = Object.fromEntries(
+    workOrder.signatures.map((s) => [
+      s.signerRole,
+      {
+        signerName: s.signerName,
+        signedAt: s.signedAt,
+        matchesCurrentPayload: s.matchesCurrentPayload,
+      } satisfies SignatureState,
+    ]),
+  );
+  const staleSignatures = workOrder.signatures.filter((s) => !s.matchesCurrentPayload);
 
   const [saveState, saveDraft, saving] = useActionState<WorkOrderState, FormData>(saveDraftAction, {});
   const [submitState, submit, submitting] = useActionState<WorkOrderState, FormData>(submitAction, {});
@@ -102,6 +119,20 @@ export function WorkOrderEditor({
       )}
       {state.ok && <div className="card p-3 bg-green-50 border-green-300 text-sm">{state.ok}</div>}
 
+      {staleSignatures.length > 0 && (
+        <div className="card p-3 bg-[var(--color-brand-orange-50)] border-[var(--color-brand-orange)]/40 text-sm">
+          <strong>ฟอร์มถูกแก้หลังจากเซ็นแล้ว</strong> —{' '}
+          {staleSignatures.map((s) => s.signerName).join(', ')} เซ็นไว้กับข้อมูลชุดก่อน
+          ต้องให้เซ็นใหม่ก่อนส่ง มิฉะนั้นลายเซ็นจะไม่ครอบคลุมสิ่งที่เอกสารบอกตอนนี้
+        </div>
+      )}
+
+      {signMessage && (
+        <div className="card p-3 bg-[var(--color-brand-orange-50)] border-[var(--color-brand-orange)]/40 text-sm">
+          {signMessage}
+        </div>
+      )}
+
       <FormRenderer
         schema={workOrder.schema}
         values={payload}
@@ -109,6 +140,37 @@ export function WorkOrderEditor({
         errors={submitState.fieldErrors ?? {}}
         readOnly={readOnly}
         workOrderId={workOrder.id}
+        signatures={signatures}
+        onSign={async ({ storageKey, signerRole, signerName, signerPosition }) => {
+          setSignMessage(null);
+
+          // The payload sent here is the one the signature is hashed against,
+          // so it must already contain the key that was just uploaded —
+          // setPayload has not flushed yet at this point.
+          const withSignature = writeSignatureKey(
+            workOrder.schema,
+            payload,
+            signerRole,
+            storageKey,
+          );
+
+          const body = new FormData();
+          body.append('workOrderId', workOrder.id);
+          body.append('signerRole', signerRole);
+          body.append('signerName', signerName);
+          body.append('signerPosition', signerPosition);
+          body.append('storageKey', storageKey);
+          body.append('payload', JSON.stringify(withSignature));
+
+          const result = await signAction({}, body);
+          if (result.error) return { error: result.error };
+
+          setPayload(withSignature);
+          // Pull the recorded signature back so it renders as signed, with who
+          // and when, rather than as an unsaved drawing.
+          router.refresh();
+          return {};
+        }}
       />
 
       <div className="card p-4 space-y-3">

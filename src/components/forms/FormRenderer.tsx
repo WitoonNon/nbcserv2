@@ -3,6 +3,23 @@
 import { useState } from 'react';
 import type { FormField, FormSchema } from '@/lib/forms/types';
 import { PhotoGroupInput } from './PhotoGroupInput';
+import { SignatureInput } from './SignatureInput';
+
+/** What the editor knows about a signature already on file. */
+export interface SignatureState {
+  signerName: string;
+  signedAt: string;
+  matchesCurrentPayload: boolean;
+}
+
+export interface SignHandler {
+  (input: {
+    storageKey: string;
+    signerRole: 'CUSTOMER' | 'TECHNICIAN' | 'SUPERVISOR';
+    signerName: string;
+    signerPosition: string;
+  }): Promise<{ error?: string } | void>;
+}
 
 /**
  * Renders any FormTemplate schema.
@@ -45,9 +62,21 @@ interface FieldProps {
   readOnly: boolean;
   /** Absent on the blank-template preview, which has nothing to attach to. */
   workOrderId?: string;
+  onSign?: SignHandler;
+  /** Signatures already recorded, keyed by signer role. */
+  signatures?: Record<string, SignatureState>;
 }
 
-function Field({ field, values, setValue, errors, readOnly, workOrderId }: FieldProps) {
+function Field({
+  field,
+  values,
+  setValue,
+  errors,
+  readOnly,
+  workOrderId,
+  onSign,
+  signatures,
+}: FieldProps) {
   if (field.visibleWhen) {
     const current = values[field.visibleWhen.key];
     if (!field.visibleWhen.equals.includes(current as string)) return null;
@@ -77,7 +106,8 @@ function Field({ field, values, setValue, errors, readOnly, workOrderId }: Field
             {field.fields.map((f) => (
               <div key={f.key} className={f.kind === 'textarea' || f.kind === 'multiselect' ? 'sm:col-span-2' : ''}>
                 <Field field={f} values={inner} setValue={setInner} errors={errors}
-                  readOnly={readOnly} workOrderId={workOrderId} />
+                  readOnly={readOnly} workOrderId={workOrderId}
+                  onSign={onSign} signatures={signatures} />
               </div>
             ))}
           </div>
@@ -275,15 +305,42 @@ function Field({ field, values, setValue, errors, readOnly, workOrderId }: Field
       );
     }
 
-    case 'signature':
-      return (
-        <div>
-          <Label field={field} />
-          <div className="h-20 border border-dashed border-[var(--color-line)] rounded bg-white grid place-items-center text-[var(--color-muted)] text-xs">
-            เซ็นที่นี่
+    case 'signature': {
+      // Same rule as photographs: the blank-template preview has no document
+      // to bind a signature to, so it stays a picture of a box.
+      if (!workOrderId) {
+        return (
+          <div>
+            <Label field={field} />
+            <div className="h-20 border border-dashed border-[var(--color-line)] rounded bg-white grid place-items-center text-[var(--color-muted)] text-xs">
+              เซ็นได้เมื่อเปิดใบงานจริง
+            </div>
           </div>
+        );
+      }
+
+      const recorded = signatures?.[field.signerRole];
+      return (
+        <div className="sm:col-span-2">
+          <Label field={field} />
+          <SignatureInput
+            field={field}
+            workOrderId={workOrderId}
+            value={(values[field.key] as string) || undefined}
+            onChange={(key) => setValue(field.key, key)}
+            onSign={onSign}
+            // The name field sits beside the signature in the same section,
+            // which is the slice `values` already points at here.
+            siblings={values}
+            readOnly={readOnly}
+            error={error}
+            signedAt={recorded?.signedAt}
+            signerName={recorded?.signerName}
+            stale={recorded ? !recorded.matchesCurrentPayload : false}
+          />
         </div>
       );
+    }
 
     case 'assetList':
       return (
@@ -350,6 +407,8 @@ export function FormRenderer({
   errors = {},
   readOnly = false,
   workOrderId,
+  onSign,
+  signatures,
 }: {
   schema: FormSchema;
   values?: Record<string, unknown>;
@@ -358,6 +417,8 @@ export function FormRenderer({
   readOnly?: boolean;
   /** Which work order photographs attach to. Omitted by the template preview. */
   workOrderId?: string;
+  onSign?: SignHandler;
+  signatures?: Record<string, SignatureState>;
 }) {
   const [internal, setInternal] = useState<Record<string, unknown>>({});
   const values = controlled ?? internal;
@@ -372,7 +433,8 @@ export function FormRenderer({
     <div className="space-y-3">
       {schema.fields.map((f) => (
         <Field key={f.key} field={f} values={values} setValue={setValue}
-          errors={errors} readOnly={readOnly} workOrderId={workOrderId} />
+          errors={errors} readOnly={readOnly} workOrderId={workOrderId}
+          onSign={onSign} signatures={signatures} />
       ))}
     </div>
   );

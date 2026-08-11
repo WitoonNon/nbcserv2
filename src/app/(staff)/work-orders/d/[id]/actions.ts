@@ -3,11 +3,14 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { FormCode } from '@/generated/prisma';
+import { headers } from 'next/headers';
+import type { SignerRole } from '@/generated/prisma';
 import {
   approveWorkOrder,
   createWorkOrder,
   returnWorkOrder,
   saveWorkOrderDraft,
+  signWorkOrder,
   submitWorkOrder,
   WorkOrderError,
 } from '@/modules/workorders/workorder.service';
@@ -108,6 +111,45 @@ export async function submitAction(
 
     revalidatePath(`/work-orders/d/${workOrderId}`);
     return { ok: 'ส่งใบงานให้หัวหน้างานตรวจแล้ว' };
+  } catch (e) {
+    return friendlyError(e);
+  }
+}
+
+/**
+ * Record a signature.
+ *
+ * A server action rather than an API route because the payload has to be
+ * persisted and hashed together — the signature means nothing unless the
+ * content it was taken over is the content that was stored.
+ */
+export async function signAction(
+  _prev: WorkOrderState,
+  formData: FormData,
+): Promise<WorkOrderState> {
+  const workOrderId = String(formData.get('workOrderId') ?? '');
+  if (!workOrderId) return { error: 'ไม่พบใบงาน' };
+
+  try {
+    const actor = await assertPermission('workorder.read');
+    const requestHeaders = await headers();
+
+    await signWorkOrder({
+      workOrderId,
+      signerRole: String(formData.get('signerRole') ?? '') as SignerRole,
+      signerName: String(formData.get('signerName') ?? ''),
+      signerPosition: String(formData.get('signerPosition') ?? '') || null,
+      storageKey: String(formData.get('storageKey') ?? ''),
+      payload: readPayload(formData),
+      actorId: actor.id,
+      // Recorded because a dispute about a signature is a dispute about where
+      // and on what it was given.
+      deviceInfo: requestHeaders.get('user-agent'),
+      ip: requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+    });
+
+    revalidatePath(`/work-orders/d/${workOrderId}`);
+    return { ok: 'บันทึกลายเซ็นแล้ว' };
   } catch (e) {
     return friendlyError(e);
   }

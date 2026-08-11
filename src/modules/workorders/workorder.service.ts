@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/db';
-import type { FormCode, Prisma, WorkOrderStatus } from '@/generated/prisma';
+import type { FormCode, Prisma, SignerRole, WorkOrderStatus } from '@/generated/prisma';
 import { buildValidator, flattenFields, type FormSchema } from '@/lib/forms/types';
 import { nextDocumentNo } from './sequence.service';
 
@@ -23,6 +23,22 @@ import { nextDocumentNo } from './sequence.service';
 
 export class WorkOrderError extends Error {}
 
+export interface SignatureView {
+  signerRole: SignerRole;
+  signerName: string;
+  signerPosition: string | null;
+  storageKey: string;
+  signedAt: string;
+  /**
+   * False when the form has been edited since this was signed.
+   *
+   * Not an error on its own — a technician correcting a typo before submitting
+   * is ordinary. It means the signature no longer covers what the document now
+   * says, so it has to be visible rather than silently carried forward.
+   */
+  matchesCurrentPayload: boolean;
+}
+
 export interface WorkOrderView {
   id: string;
   jobId: string;
@@ -41,6 +57,7 @@ export interface WorkOrderView {
   customerName: string;
   siteAddress: string;
   updatedAt: string;
+  signatures: SignatureView[];
 }
 
 /** The payload hash a signature binds itself to. */
@@ -130,6 +147,7 @@ export async function getWorkOrder(id: string): Promise<WorkOrderView | null> {
       template: true,
       submittedBy: { select: { name: true } },
       approvedBy: { select: { name: true } },
+      signatures: { orderBy: { signedAt: 'asc' } },
       job: {
         select: {
           jobNo: true,
@@ -141,6 +159,9 @@ export async function getWorkOrder(id: string): Promise<WorkOrderView | null> {
   });
   if (!wo) return null;
 
+  const payload = (wo.payload ?? {}) as Record<string, unknown>;
+  const currentHash = payloadHash(payload);
+
   return {
     id: wo.id,
     jobId: wo.jobId,
@@ -149,7 +170,7 @@ export async function getWorkOrder(id: string): Promise<WorkOrderView | null> {
     templateCode: wo.templateCode,
     templateVersion: wo.templateVersion,
     schema: wo.template.schema as unknown as FormSchema,
-    payload: (wo.payload ?? {}) as Record<string, unknown>,
+    payload,
     status: wo.status,
     returnReason: wo.returnReason,
     submittedAt: wo.submittedAt?.toISOString() ?? null,
@@ -159,6 +180,14 @@ export async function getWorkOrder(id: string): Promise<WorkOrderView | null> {
     customerName: wo.job.customer.displayName,
     siteAddress: wo.job.site?.address ?? '-',
     updatedAt: wo.updatedAt.toISOString(),
+    signatures: wo.signatures.map((s) => ({
+      signerRole: s.signerRole,
+      signerName: s.signerName,
+      signerPosition: s.signerPosition,
+      storageKey: s.storageKey,
+      signedAt: s.signedAt.toISOString(),
+      matchesCurrentPayload: s.payloadHash === currentHash,
+    })),
   };
 }
 
@@ -220,6 +249,83 @@ export async function saveWorkOrderDraft(params: {
   });
 
   return { updatedAt: saved.updatedAt.toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// Sign
+// ---------------------------------------------------------------------------
+
+/**
+ * Record a signature against the work order.
+ *
+ * The payload is written and hashed in the SAME transaction, so the hash is
+ * always taken over content this process actually persisted — not over
+ * whatever a caller claimed was on screen.
+ *
+ * The timing matters more than it looks. Hashing at submit instead would make
+ * the hash cover text typed AFTER the customer signed, which is precisely the
+ * edit the hash exists to expose. Binding at the moment of signing is what
+ * separates a picture of a signature from evidence.
+ */
+export async function signWorkOrder(params: {
+  workOrderId: string;
+  signerRole: SignerRole;
+  signerName: string;
+  signerPosition?: string | null;
+  /** Storage key of the captured signature image. */
+  storageKey: string;
+  /** The form as it stands at the moment of signing. */
+  payload: Record<string, unknown>;
+  actorId?: string | null;
+  deviceInfo?: string | null;
+  ip?: string | null;
+}): Promise<{ signedAt: string; payloadHash: string }> {
+  const signerName = params.signerName.trim();
+  // An unnamed signature identifies nobody, which makes it decoration rather
+  // than evidence — and the column is NOT NULL for the same reason.
+  if (!signerName) throw new WorkOrderError('ต้องกรอกชื่อผู้เซ็นก่อนเซ็น');
+  if (!params.storageKey) throw new WorkOrderError('ยังไม่ได้เซ็น');
+
+  const wo = await prisma.workOrder.findUnique({
+    where: { id: params.workOrderId },
+    select: { status: true },
+  });
+  if (!wo) throw new WorkOrderError('ไม่พบใบงาน');
+  assertEditable(wo.status);
+
+  const hash = payloadHash(params.payload);
+
+  const signature = await prisma.$transaction(async (tx) => {
+    await tx.workOrder.update({
+      where: { id: params.workOrderId },
+      data: { payload: params.payload as Prisma.InputJsonValue },
+    });
+
+    // Signing again replaces this role's previous signature rather than
+    // stacking. A draft that was re-signed after a correction has one truth,
+    // and the superseded row would only ever be a hash of content nobody
+    // agreed to. Signatures on a SUBMITTED or APPROVED document cannot be
+    // touched at all — assertEditable above already refused those.
+    await tx.signature.deleteMany({
+      where: { workOrderId: params.workOrderId, signerRole: params.signerRole },
+    });
+
+    return tx.signature.create({
+      data: {
+        workOrderId: params.workOrderId,
+        signerRole: params.signerRole,
+        signerName,
+        signerPosition: params.signerPosition?.trim() || null,
+        storageKey: params.storageKey,
+        payloadHash: hash,
+        deviceInfo: params.deviceInfo ?? null,
+        ip: params.ip ?? null,
+      },
+      select: { signedAt: true },
+    });
+  });
+
+  return { signedAt: signature.signedAt.toISOString(), payloadHash: hash };
 }
 
 export interface SubmitResult {
