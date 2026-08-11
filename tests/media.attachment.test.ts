@@ -198,6 +198,82 @@ describe('attaching a field photograph', () => {
     ).rejects.toMatchObject({ status: 409 });
   });
 
+  it('stores the preview beside the original and records both', async () => {
+    const workOrderId = await openDraft();
+
+    const result = await attachToWorkOrder({
+      workOrderId, kind: 'BEFORE', mime: 'image/jpeg', body: PNG_1PX,
+      thumb: Buffer.from(PNG_1PX), actorId,
+    });
+
+    expect(result.hasThumb).toBe(true);
+    const row = await findAttachmentByKey(result.key);
+    // A derived name, so nothing has to be looked up to find the pair.
+    expect(row?.thumbKey).toBe(result.key.replace(/\.jpg$/, '.thumb.jpg'));
+    await expect(storage().get(row!.thumbKey!)).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('attaches without a preview when the browser could not make one', async () => {
+    const workOrderId = await openDraft();
+
+    const result = await attachToWorkOrder({
+      workOrderId, kind: 'BEFORE', mime: 'image/jpeg', body: PNG_1PX, actorId,
+    });
+
+    // The photograph is the evidence; the preview is a convenience.
+    expect(result.hasThumb).toBe(false);
+    expect((await findAttachmentByKey(result.key))?.thumbKey).toBeNull();
+  });
+
+  it('keeps the capture time and position the camera recorded', async () => {
+    const workOrderId = await openDraft();
+
+    const { key } = await attachToWorkOrder({
+      workOrderId, kind: 'BEFORE', mime: 'image/jpeg', body: PNG_1PX, actorId,
+      exif: { takenAt: '2026-08-09T07:30:00.000Z', lat: 13.741667, lng: 100.5 },
+    });
+
+    const row = await findAttachmentByKey(key);
+    expect(row?.exifTakenAt?.toISOString()).toBe('2026-08-09T07:30:00.000Z');
+    expect(row?.lat).toBeCloseTo(13.741667, 5);
+    expect(row?.lng).toBeCloseTo(100.5, 5);
+  });
+
+  it('drops metadata that cannot be true', async () => {
+    const workOrderId = await openDraft();
+
+    const { key } = await attachToWorkOrder({
+      workOrderId, kind: 'BEFORE', mime: 'image/jpeg', body: PNG_1PX, actorId,
+      exif: {
+        // Next year, and a latitude off the planet.
+        takenAt: new Date(Date.now() + 400 * 86_400_000).toISOString(),
+        lat: 999,
+        lng: 100.5,
+      },
+    });
+
+    // A wrong position in a dispute points evidence the wrong way; no value
+    // is better than a false one.
+    const row = await findAttachmentByKey(key);
+    expect(row?.exifTakenAt).toBeNull();
+    expect(row?.lat).toBeNull();
+    expect(row?.lng).toBeNull();
+  });
+
+  it('stores no position at all when only one half of it arrived', async () => {
+    const workOrderId = await openDraft();
+
+    const { key } = await attachToWorkOrder({
+      workOrderId, kind: 'BEFORE', mime: 'image/jpeg', body: PNG_1PX, actorId,
+      exif: { lat: 13.741667 },
+    });
+
+    // Half a coordinate would place the site on the meridian.
+    const row = await findAttachmentByKey(key);
+    expect(row?.lat).toBeNull();
+    expect(row?.lng).toBeNull();
+  });
+
   it('refuses to attach to a work order that does not exist', async () => {
     await expect(
       attachToWorkOrder({

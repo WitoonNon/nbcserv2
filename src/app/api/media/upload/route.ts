@@ -45,6 +45,7 @@ export async function POST(req: Request) {
   }
 
   const file = form.get('file');
+  const thumb = form.get('thumb');
   const workOrderId = String(form.get('workOrderId') ?? '');
   const kind = String(form.get('kind') ?? 'OTHER') as AttachmentKind;
 
@@ -66,12 +67,31 @@ export async function POST(req: Request) {
     );
   }
 
+  // A preview that is not small is not a preview; anything bigger than this
+  // is ignored rather than trusted.
+  const usableThumb = thumb instanceof File && thumb.size > 0 && thumb.size <= 512 * 1024;
+
+  const numeric = (name: string): number | null => {
+    const raw = form.get(name);
+    if (raw === null) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  };
+
   try {
     const result = await attachToWorkOrder({
       workOrderId,
       kind,
       mime: file.type,
       body: Buffer.from(await file.arrayBuffer()),
+      thumb: usableThumb ? Buffer.from(await thumb.arrayBuffer()) : null,
+      // Read from the original on the client, because the downscale that
+      // happens there destroys it. attachToWorkOrder decides what is plausible.
+      exif: {
+        takenAt: form.get('takenAt') ? String(form.get('takenAt')) : null,
+        lat: numeric('lat'),
+        lng: numeric('lng'),
+      },
       actorId: user.id,
     });
     return NextResponse.json(result, { status: 201 });

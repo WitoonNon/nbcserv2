@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
  * is deliberately guessable (yyyymm/entity/id/kind/file), which is exactly why
  * knowing a key must not be enough to read one.
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ key: string[] }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ key: string[] }> }) {
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'ยังไม่ได้เข้าสู่ระบบ' }, { status: 401 });
@@ -32,20 +32,28 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string[] 
     return NextResponse.json({ error: 'ไม่พบไฟล์' }, { status: 404 });
   }
 
+  // `?thumb=1` asks for the preview. It is addressed through the full image's
+  // key so the form payload only ever has to store one key per photograph —
+  // and an attachment uploaded before previews existed simply serves the full
+  // image instead of 404ing.
+  const wantsThumb = new URL(req.url).searchParams.get('thumb') === '1';
+  const served = wantsThumb && attachment.thumbKey ? attachment.thumbKey : key;
+  const mime = served === key ? attachment.mime : 'image/jpeg';
+
   const adapter = storage();
 
   // Object storage can serve the bytes itself; going through this process
   // would double the bandwidth for no added safety, since the signed URL is
   // only minted after the checks above.
   if (adapter.name !== 'local') {
-    return NextResponse.redirect(await adapter.url(key));
+    return NextResponse.redirect(await adapter.url(served));
   }
 
   try {
-    const body = await adapter.get(key);
+    const body = await adapter.get(served);
     return new NextResponse(new Uint8Array(body), {
       headers: {
-        'Content-Type': attachment.mime,
+        'Content-Type': mime,
         'Content-Length': String(body.byteLength),
         // Private: the URL is authorised per session, so a shared cache must
         // never hold the response for the next person to ask.

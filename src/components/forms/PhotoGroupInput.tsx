@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import type { PhotoGroupField } from '@/lib/forms/types';
+import { readExif } from '@/lib/media/exif';
 
 /**
  * Field photographs for one photoGroup.
@@ -26,40 +27,59 @@ import type { PhotoGroupField } from '@/lib/forms/types';
 const MAX_EDGE_PX = 1600;
 const JPEG_QUALITY = 0.78;
 
+/** Preview size — a grid of these should cost less than one full photo. */
+const THUMB_EDGE_PX = 320;
+const THUMB_QUALITY = 0.7;
+
+/** Draw a bitmap at a bounded size and encode it. */
+function encodeAt(bitmap: ImageBitmap, maxEdge: number, quality: number): Promise<Blob> {
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('เบราว์เซอร์นี้ย่อรูปไม่ได้');
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('ย่อรูปไม่สำเร็จ'))),
+      'image/jpeg',
+      quality,
+    );
+  });
+}
+
+interface Prepared {
+  full: Blob;
+  thumb: Blob;
+  exif: ReturnType<typeof readExif>;
+}
+
 /**
- * Re-encode through a canvas.
+ * Read the metadata, then re-encode at two sizes from a single decode.
  *
- * `imageOrientation: 'from-image'` is essential: phones record orientation in
- * EXIF rather than rotating the pixels, and a canvas that ignores it uploads
- * every portrait photo lying on its side.
+ * Order matters: `readExif` runs against the untouched bytes, because the
+ * canvas re-encode below destroys EXIF. Capture time and GPS are the answer to
+ * "was the technician actually there, and when?", so they are read out before
+ * they are lost rather than written off.
  *
- * Re-encoding also strips EXIF, which takes the capture time and GPS with it —
- * Attachment.exifTakenAt therefore stays null. Recovering those would mean
- * uploading the untouched original, which is the cost this whole function
- * exists to avoid.
+ * `imageOrientation: 'from-image'` is equally essential: phones record
+ * orientation in EXIF rather than rotating the pixels, and a canvas that
+ * ignores it uploads every portrait photo lying on its side.
  */
-async function downscale(file: File): Promise<Blob> {
+async function prepare(file: File): Promise<Prepared> {
+  const original = await file.arrayBuffer();
+  const exif = readExif(original);
+
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   try {
-    const scale = Math.min(1, MAX_EDGE_PX / Math.max(bitmap.width, bitmap.height));
-    const width = Math.round(bitmap.width * scale);
-    const height = Math.round(bitmap.height * scale);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('เบราว์เซอร์นี้ย่อรูปไม่ได้');
-    ctx.drawImage(bitmap, 0, 0, width, height);
-
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error('ย่อรูปไม่สำเร็จ'))),
-        'image/jpeg',
-        JPEG_QUALITY,
-      );
-    });
+    // Decoding a multi-megapixel photo is the expensive part; both sizes come
+    // off the one bitmap.
+    const full = await encodeAt(bitmap, MAX_EDGE_PX, JPEG_QUALITY);
+    const thumb = await encodeAt(bitmap, THUMB_EDGE_PX, THUMB_QUALITY);
+    return { full, thumb, exif };
   } finally {
     bitmap.close();
   }
@@ -101,12 +121,18 @@ export function PhotoGroupInput({
 
     for (const file of chosen) {
       try {
-        const blob = await downscale(file);
+        const { full, thumb, exif } = await prepare(file);
 
         const body = new FormData();
-        body.append('file', new File([blob], 'photo.jpg', { type: 'image/jpeg' }));
+        body.append('file', new File([full], 'photo.jpg', { type: 'image/jpeg' }));
+        body.append('thumb', new File([thumb], 'thumb.jpg', { type: 'image/jpeg' }));
         body.append('workOrderId', workOrderId);
         body.append('kind', field.attachmentKind);
+        if (exif.takenAt) body.append('takenAt', exif.takenAt);
+        if (exif.lat !== undefined && exif.lng !== undefined) {
+          body.append('lat', String(exif.lat));
+          body.append('lng', String(exif.lng));
+        }
 
         const res = await fetch('/api/media/upload', { method: 'POST', body });
         const json: unknown = await res.json().catch(() => null);
@@ -143,7 +169,14 @@ export function PhotoGroupInput({
             {/* Not next/image: these are private files behind a session check,
                 so they must not go through the image optimiser's cache. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/media/${key}`} alt="รูปหน้างาน" className="size-full object-cover" />
+            <img
+              // The preview, not the full image: a form can carry a dozen of
+              // these and the grid renders them at 80px either way.
+              src={`/api/media/${key}?thumb=1`}
+              alt="รูปหน้างาน"
+              loading="lazy"
+              className="size-full object-cover"
+            />
             {!readOnly && (
               <button
                 type="button"
