@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/db';
+import { payloadHash, payloadHashMatches } from '@/lib/forms/payload-hash';
 import type { FormCode, Prisma, SignerRole, WorkOrderStatus } from '@/generated/prisma';
 import { buildValidator, flattenFields, type FormSchema } from '@/lib/forms/types';
 import { nextDocumentNo } from './sequence.service';
@@ -60,21 +60,15 @@ export interface WorkOrderView {
   signatures: SignatureView[];
 }
 
-/** The payload hash a signature binds itself to. */
-export function payloadHash(payload: unknown): string {
-  // Key order must not change the hash, or re-serialising an unchanged payload
-  // would look like tampering.
-  return createHash('sha256').update(stableStringify(payload)).digest('hex');
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
-}
+/**
+ * The payload hash a signature binds itself to.
+ *
+ * Re-exported from the shared module so there is exactly one implementation:
+ * the browser computes this at the moment of signing and the server verifies
+ * it here, and a second implementation would eventually disagree with the
+ * first — at which point every signature ever taken would read as tampered.
+ */
+export { payloadHash, payloadHashMatches } from '@/lib/forms/payload-hash';
 
 // ---------------------------------------------------------------------------
 // Create
@@ -160,7 +154,7 @@ export async function getWorkOrder(id: string): Promise<WorkOrderView | null> {
   if (!wo) return null;
 
   const payload = (wo.payload ?? {}) as Record<string, unknown>;
-  const currentHash = payloadHash(payload);
+  const currentHash = await payloadHash(payload);
 
   return {
     id: wo.id,
@@ -255,6 +249,24 @@ export async function saveWorkOrderDraft(params: {
 // Sign
 // ---------------------------------------------------------------------------
 
+/** How far back a queued signature may claim to have been taken. */
+const MAX_SYNC_LAG_MS = 7 * 86_400_000;
+
+/**
+ * The client says when the customer signed. Believe it within reason.
+ *
+ * Offline that timestamp is the only record of the real moment, so it has to
+ * be accepted — but a device with a wrong clock would otherwise file a
+ * signature in the future or last year, and `signedAt` is what a dispute reads.
+ * Outside the window we fall back to the server's clock, which is at least
+ * honestly "when we heard about it".
+ */
+function plausibleSignedAt(claimed: Date | null | undefined): Date | null {
+  if (!claimed || Number.isNaN(claimed.getTime())) return null;
+  const drift = Date.now() - claimed.getTime();
+  return drift >= -60_000 && drift <= MAX_SYNC_LAG_MS ? claimed : null;
+}
+
 /**
  * Record a signature against the work order.
  *
@@ -276,6 +288,17 @@ export async function signWorkOrder(params: {
   storageKey: string;
   /** The form as it stands at the moment of signing. */
   payload: Record<string, unknown>;
+  /**
+   * The hash the browser took when the customer lifted their finger.
+   *
+   * Optional only so the online path can omit it; when present it is checked
+   * against the payload being stored. A signature taken with no signal and
+   * synced an hour later carries this, and a mismatch means the form changed
+   * in between — which is the one thing the hash exists to catch.
+   */
+  signedHash?: string | null;
+  /** When the customer actually signed, which offline is not when we hear. */
+  signedAt?: Date | null;
   actorId?: string | null;
   deviceInfo?: string | null;
   ip?: string | null;
@@ -293,7 +316,17 @@ export async function signWorkOrder(params: {
   if (!wo) throw new WorkOrderError('ไม่พบใบงาน');
   assertEditable(wo.status);
 
-  const hash = payloadHash(params.payload);
+  const hash = await payloadHash(params.payload);
+
+  // What the browser hashed and what we are about to store have to be the same
+  // bytes. If they are not, the form was edited between the signature and this
+  // request — over a sync queue that can be hours wide, that is a real
+  // possibility rather than a theoretical one.
+  if (params.signedHash && !(await payloadHashMatches(params.payload, params.signedHash))) {
+    throw new WorkOrderError('ข้อมูลในฟอร์มเปลี่ยนไปหลังจากเซ็น — ต้องให้เซ็นใหม่');
+  }
+
+  const signedAt = plausibleSignedAt(params.signedAt);
 
   const signature = await prisma.$transaction(async (tx) => {
     await tx.workOrder.update({
@@ -318,6 +351,7 @@ export async function signWorkOrder(params: {
         signerPosition: params.signerPosition?.trim() || null,
         storageKey: params.storageKey,
         payloadHash: hash,
+        ...(signedAt ? { signedAt } : {}),
         deviceInfo: params.deviceInfo ?? null,
         ip: params.ip ?? null,
       },

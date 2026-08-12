@@ -3,6 +3,7 @@ import { prisma } from '../src/lib/db';
 import {
   createWorkOrder,
   getWorkOrder,
+  payloadHash,
   saveWorkOrderDraft,
   signWorkOrder,
   submitWorkOrder,
@@ -204,6 +205,71 @@ describe('signing binds a signature to what was signed', () => {
     const roles = (await getWorkOrder(workOrderId))!.signatures.map((s) => s.signerRole);
     expect(roles).toContain('CUSTOMER');
     expect(roles).toContain('TECHNICIAN');
+  });
+});
+
+describe('a signature that was taken offline and synced later', () => {
+  it('accepts the hash the phone took, when it matches what is stored', async () => {
+    const workOrderId = await openDraft();
+    const signed = payloadWith({ note: { noteText: 'ลูกค้ารับทราบ' } });
+
+    await signWorkOrder({
+      workOrderId, signerRole: 'CUSTOMER', signerName: 'ผู้เซ็น',
+      storageKey: 'sig/a.png', payload: signed, actorId,
+      signedHash: await payloadHash(signed),
+    });
+
+    expect((await getWorkOrder(workOrderId))!.signatures[0]!.matchesCurrentPayload).toBe(true);
+  });
+
+  it('refuses when the form changed between signing and syncing', async () => {
+    const workOrderId = await openDraft();
+    const asSigned = payloadWith();
+    const hashFromPhone = await payloadHash(asSigned);
+
+    // The queue sat on the phone; meanwhile a part was added to the form.
+    const edited = payloadWith({ parts: [{ description: 'คอมเพรสเซอร์', qty: '1', unit: 'ตัว' }] });
+
+    await expect(
+      signWorkOrder({
+        workOrderId, signerRole: 'CUSTOMER', signerName: 'ผู้เซ็น',
+        storageKey: 'sig/a.png', payload: edited, actorId,
+        signedHash: hashFromPhone,
+      }),
+    ).rejects.toBeInstanceOf(WorkOrderError);
+
+    // And nothing was written — a refused sync must not leave a signature.
+    expect((await getWorkOrder(workOrderId))!.signatures).toHaveLength(0);
+  });
+
+  it('keeps the time the customer signed, not the time the queue drained', async () => {
+    const workOrderId = await openDraft();
+    const signedInTheField = new Date(Date.now() - 3 * 3_600_000);
+
+    await signWorkOrder({
+      workOrderId, signerRole: 'CUSTOMER', signerName: 'ผู้เซ็น',
+      storageKey: 'sig/a.png', payload: payloadWith(), actorId,
+      signedAt: signedInTheField,
+    });
+
+    const view = await getWorkOrder(workOrderId);
+    const recorded = new Date(view!.signatures[0]!.signedAt).getTime();
+    expect(Math.abs(recorded - signedInTheField.getTime())).toBeLessThan(1000);
+  });
+
+  it('ignores a device clock claiming the future', async () => {
+    const workOrderId = await openDraft();
+
+    await signWorkOrder({
+      workOrderId, signerRole: 'CUSTOMER', signerName: 'ผู้เซ็น',
+      storageKey: 'sig/a.png', payload: payloadWith(), actorId,
+      signedAt: new Date(Date.now() + 30 * 86_400_000),
+    });
+
+    // signedAt is what a dispute reads; a wrong phone clock must not file a
+    // signature next month. Falls back to when we actually heard about it.
+    const recorded = new Date((await getWorkOrder(workOrderId))!.signatures[0]!.signedAt).getTime();
+    expect(recorded).toBeLessThanOrEqual(Date.now() + 60_000);
   });
 });
 

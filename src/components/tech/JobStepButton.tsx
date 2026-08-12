@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import type { FieldStep } from '@/modules/jobs/field-work.service';
-import { advanceJobAction, type FieldState } from '@/app/(tech)/t/today/actions';
+import { submitOrQueue } from '@/lib/offline/client';
 
 /**
  * The one button that moves a job forward.
@@ -50,27 +51,46 @@ export function JobStepButton({
   /** Closing with no paperwork handed in — said out loud, not blocked. */
   warnNoWorkOrder: boolean;
 }) {
-  const [state, run, pending] = useActionState<FieldState, FormData>(advanceJobAction, {});
+  const router = useRouter();
   const [locating, setLocating] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [queued, setQueued] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function press() {
-    const body = new FormData();
-    body.append('jobId', jobId);
-    body.append('to', step.to);
-    // The moment of the tap, not the moment the request arrives.
-    body.append('occurredAt', new Date().toISOString());
+    setError(null);
+
+    const body: Record<string, unknown> = {
+      jobId,
+      to: step.to,
+      // The moment of the tap, not the moment the request arrives. With no
+      // signal those are hours apart, and the first one is the true one.
+      occurredAt: new Date().toISOString(),
+    };
 
     if (step.capturesLocation) {
       setLocating(true);
       const here = await currentPosition();
       setLocating(false);
       if (here) {
-        body.append('lat', String(here.lat));
-        body.append('lng', String(here.lng));
+        body.lat = here.lat;
+        body.lng = here.lng;
       }
     }
 
-    run(body);
+    setPending(true);
+    // Queued first, then sent. Even online it takes the queue's path, so the
+    // path that matters offline is the one exercised on every single tap
+    // rather than only when something has already gone wrong.
+    const result = await submitOrQueue('job-status', body);
+    setPending(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setQueued(result.queued);
+    if (!result.queued) router.refresh();
   }
 
   const busy = pending || locating;
@@ -93,8 +113,13 @@ export function JobStepButton({
           ยังไม่ได้ส่งใบงาน — ปิดงานได้ แต่จะไม่มีบันทึกการเข้าหน้างานไว้ให้ออฟฟิศ
         </p>
       )}
-      {state.error && (
-        <p className="text-[11px] text-[var(--color-status-cancelled)] px-3 py-1.5">{state.error}</p>
+      {queued && (
+        <p className="text-[11px] text-[var(--color-brand-blue-600)] px-3 py-1.5 bg-[var(--color-brand-sky-50)]">
+          บันทึกไว้ในเครื่องแล้ว — ยังไม่มีสัญญาณ ระบบจะส่งให้เองเมื่อกลับมาออนไลน์
+        </p>
+      )}
+      {error && (
+        <p className="text-[11px] text-[var(--color-status-cancelled)] px-3 py-1.5">{error}</p>
       )}
     </div>
   );

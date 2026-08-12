@@ -7,6 +7,7 @@ import { requireUser } from '@/lib/auth/guard';
 import { dateOnly } from '@/modules/scheduling/quota.service';
 import { nextStepFor } from '@/modules/jobs/field-work.service';
 import { JobStepButton } from '@/components/tech/JobStepButton';
+import { OutboxIndicator } from '@/components/tech/OutboxIndicator';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,8 @@ export default async function TechTodayPage() {
         <h1 className="text-xl">งานวันนี้</h1>
         <p className="text-sm text-[var(--color-muted)]">{formatThaiDate(new Date(), 'long')}</p>
       </div>
+
+      <OutboxIndicator />
 
       {jobs === null && (
         <div className="card p-4 bg-[var(--color-brand-orange-50)] border-[var(--color-brand-orange)]/40">

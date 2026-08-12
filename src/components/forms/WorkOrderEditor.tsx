@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormRenderer, type SignatureState } from '@/components/forms/FormRenderer';
 import { writeSignatureKey } from '@/lib/forms/types';
+import { payloadHash } from '@/lib/forms/payload-hash';
 import type { WorkOrderView } from '@/modules/workorders/workorder.service';
 import {
   approveAction,
@@ -154,6 +155,11 @@ export function WorkOrderEditor({
             storageKey,
           );
 
+          // Hash here, now — not on the server, and not at sync time. This is
+          // the moment the customer agreed to this content, and offline it is
+          // the only moment we will ever be able to hash.
+          const signedHash = await payloadHash(withSignature);
+
           const body = new FormData();
           body.append('workOrderId', workOrder.id);
           body.append('signerRole', signerRole);
@@ -161,6 +167,8 @@ export function WorkOrderEditor({
           body.append('signerPosition', signerPosition);
           body.append('storageKey', storageKey);
           body.append('payload', JSON.stringify(withSignature));
+          body.append('signedHash', signedHash);
+          body.append('signedAt', new Date().toISOString());
 
           const result = await signAction({}, body);
           if (result.error) return { error: result.error };

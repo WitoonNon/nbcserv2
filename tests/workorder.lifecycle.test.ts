@@ -236,20 +236,24 @@ describe('work order lifecycle', () => {
   });
 });
 
+// payloadHash is async now that it runs in the browser too. Awaiting is not a
+// formality here: comparing two unawaited Promises with .not.toBe passes for
+// any input at all, so the two "changes when..." cases below would have gone
+// green against a hash function that returned a constant.
 describe('payload hashing', () => {
-  it('ignores key order so re-saving unchanged content is not seen as tampering', () => {
-    const a = payloadHash({ b: 2, a: { y: 1, x: [1, 2] } });
-    const b = payloadHash({ a: { x: [1, 2], y: 1 }, b: 2 });
+  it('ignores key order so re-saving unchanged content is not seen as tampering', async () => {
+    const a = await payloadHash({ b: 2, a: { y: 1, x: [1, 2] } });
+    const b = await payloadHash({ a: { x: [1, 2], y: 1 }, b: 2 });
     expect(a).toBe(b);
   });
 
-  it('changes when any value changes — this is what binds a signature', () => {
-    const before = payloadHash({ findings: 'คอมเพรสเซอร์เสีย' });
-    const after = payloadHash({ findings: 'คอมเพรสเซอร์ปกติ' });
+  it('changes when any value changes — this is what binds a signature', async () => {
+    const before = await payloadHash({ findings: 'คอมเพรสเซอร์เสีย' });
+    const after = await payloadHash({ findings: 'คอมเพรสเซอร์ปกติ' });
     expect(after).not.toBe(before);
   });
 
-  it('distinguishes array order, which changes what a parts list says', () => {
-    expect(payloadHash([1, 2])).not.toBe(payloadHash([2, 1]));
+  it('distinguishes array order, which changes what a parts list says', async () => {
+    expect(await payloadHash([1, 2])).not.toBe(await payloadHash([2, 1]));
   });
 });

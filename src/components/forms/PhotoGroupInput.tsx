@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react';
 import type { PhotoGroupField } from '@/lib/forms/types';
 import { readExif } from '@/lib/media/exif';
+import { workOrderMediaKey } from '@/lib/media/key';
+import { submitOrQueue } from '@/lib/offline/client';
 
 /**
  * Field photographs for one photoGroup.
@@ -102,6 +104,7 @@ export function PhotoGroupInput({
 }) {
   const [busy, setBusy] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
+  const [pendingUpload, setPendingUpload] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const atLimit = field.maxCount !== undefined && value.length >= field.maxCount;
@@ -123,32 +126,41 @@ export function PhotoGroupInput({
       try {
         const { full, thumb, exif } = await prepare(file);
 
-        const body = new FormData();
-        body.append('file', new File([full], 'photo.jpg', { type: 'image/jpeg' }));
-        body.append('thumb', new File([thumb], 'thumb.jpg', { type: 'image/jpeg' }));
-        body.append('workOrderId', workOrderId);
-        body.append('kind', field.attachmentKind);
-        if (exif.takenAt) body.append('takenAt', exif.takenAt);
-        if (exif.lat !== undefined && exif.lng !== undefined) {
-          body.append('lat', String(exif.lat));
-          body.append('lng', String(exif.lng));
-        }
+        // The client names the file. That is what lets the payload reference a
+        // photo taken with no signal: the key is the same whether the upload
+        // goes through now or when the van reaches the main road, so nothing
+        // has to be rewritten later — and rewriting it later would break every
+        // signature hash taken over this payload.
+        const mediaId = crypto.randomUUID();
+        const capturedAt = new Date();
 
-        const res = await fetch('/api/media/upload', { method: 'POST', body });
-        const json: unknown = await res.json().catch(() => null);
+        const result = await submitOrQueue('media-upload', {
+          file: full,
+          thumb,
+          mediaId,
+          capturedAt: capturedAt.toISOString(),
+          workOrderId,
+          kind: field.attachmentKind,
+          takenAt: exif.takenAt ?? null,
+          lat: exif.lat ?? null,
+          lng: exif.lng ?? null,
+        });
+        if (result.error) throw new Error(result.error);
 
-        if (!res.ok) {
-          const message =
-            json && typeof json === 'object' && 'error' in json
-              ? String((json as { error: unknown }).error)
-              : `อัปโหลดไม่สำเร็จ (${res.status})`;
-          throw new Error(message);
-        }
-
-        keys.push((json as { key: string }).key);
+        keys.push(
+          workOrderMediaKey({
+            workOrderId,
+            kind: field.attachmentKind,
+            mediaId,
+            // prepare() always re-encodes to JPEG, whatever came out of the camera.
+            extension: 'jpg',
+            at: capturedAt,
+          }),
+        );
         // Publish after each success so a failure on photo four keeps the
         // three that already made it.
         onChange([...keys]);
+        if (result.queued) setPendingUpload(true);
       } catch (e) {
         setFailure(e instanceof Error ? e.message : String(e));
         break;
@@ -227,6 +239,11 @@ export function PhotoGroupInput({
         {field.maxCount ? ` · สูงสุด ${field.maxCount} รูป` : ''}
       </p>
 
+      {pendingUpload && (
+        <span className="block text-[11px] text-[var(--color-brand-blue-600)] mt-0.5">
+          รูปเก็บไว้ในเครื่องแล้ว — จะอัปโหลดให้เองเมื่อมีสัญญาณ (รูปย่อจะยังไม่ขึ้นจนกว่าจะส่งสำเร็จ)
+        </span>
+      )}
       {failure && (
         <span className="block text-[11px] text-[var(--color-status-cancelled)] mt-0.5">{failure}</span>
       )}

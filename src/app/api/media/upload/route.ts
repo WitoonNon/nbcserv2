@@ -88,6 +88,11 @@ export async function POST(req: Request) {
       kind,
       mime: file.type,
       body: Buffer.from(await file.arrayBuffer()),
+      // Chosen by the client so a photo taken with no signal can be named in
+      // the form payload immediately, and still be the same file when the
+      // upload actually goes through.
+      mediaId: form.get('mediaId') ? String(form.get('mediaId')) : null,
+      capturedAt: form.get('capturedAt') ? new Date(String(form.get('capturedAt'))) : null,
       thumb: usableThumb ? Buffer.from(await thumb.arrayBuffer()) : null,
       // Read from the original on the client, because the downscale that
       // happens there destroys it. attachToWorkOrder decides what is plausible.

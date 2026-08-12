@@ -199,31 +199,6 @@ export function storage(): StorageAdapter {
   return cached;
 }
 
-/**
- * Every segment of a key is attacker-influenced somewhere upstream, and the
- * local driver turns keys straight into filesystem paths. `..` or a stray
- * slash would write outside the storage root, so segments are reduced to a
- * safe alphabet here rather than at each call site.
- */
-function safeSegment(value: string): string {
-  const cleaned = value.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '');
-  return cleaned || 'unnamed';
-}
-
-/** Deterministic, collision-free key layout. */
-export function mediaKey(parts: {
-  entityType: string;
-  entityId: string;
-  kind: string;
-  filename: string;
-}): string {
-  const now = new Date();
-  const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return [
-    yyyymm,
-    safeSegment(parts.entityType),
-    safeSegment(parts.entityId),
-    safeSegment(parts.kind),
-    safeSegment(parts.filename),
-  ].join('/');
-}
+// The key layout lives in @/lib/media/key so the browser can compute it too —
+// a photo taken offline is named in the payload before any server sees it.
+export { mediaKey, workOrderMediaKey } from '@/lib/media/key';

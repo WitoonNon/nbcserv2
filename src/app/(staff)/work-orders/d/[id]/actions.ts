@@ -141,6 +141,11 @@ export async function signAction(
       signerPosition: String(formData.get('signerPosition') ?? '') || null,
       storageKey: String(formData.get('storageKey') ?? ''),
       payload: readPayload(formData),
+      // Taken in the browser the instant the customer lifted their finger.
+      // Verified against the payload below, so a form edited between signing
+      // and syncing is refused rather than silently re-bound.
+      signedHash: formData.get('signedHash') ? String(formData.get('signedHash')) : null,
+      signedAt: formData.get('signedAt') ? new Date(String(formData.get('signedAt'))) : null,
       actorId: actor.id,
       // Recorded because a dispute about a signature is a dispute about where
       // and on what it was given.
