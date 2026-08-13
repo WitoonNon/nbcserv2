@@ -15,7 +15,11 @@ import { indexedDbStore } from './indexeddb-store';
 async function post(url: string, body: FormData | URLSearchParams): Promise<SendOutcome> {
   let res: Response;
   try {
-    res = await fetch(url, { method: 'POST', body });
+    // `manual` so a redirect is never followed. Followed, an expired session
+    // sends the queued write to the login page, whose 200 reads as delivered —
+    // and the item is dropped having never reached the server. Refusing to
+    // follow turns that into a retryable outcome instead.
+    res = await fetch(url, { method: 'POST', body, redirect: 'manual' });
   } catch (e) {
     // fetch only rejects when the request never happened: no signal, DNS
     // failure, connection dropped. That is the retryable case.
@@ -72,6 +76,39 @@ export function onPendingChange(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * Work the server refused for good.
+ *
+ * Kept in memory and announced rather than only logged: a refusal deletes the
+ * item, so if nobody tells the technician, a photograph they took simply is
+ * not there and they find out — if ever — from the office. A console warning
+ * on a phone is nobody.
+ */
+export interface DroppedWrite {
+  kind: string;
+  reason: string;
+  at: number;
+}
+
+const dropped: DroppedWrite[] = [];
+type DropListener = (items: DroppedWrite[]) => void;
+const dropListeners = new Set<DropListener>();
+
+export function onDropped(listener: DropListener): () => void {
+  dropListeners.add(listener);
+  return () => dropListeners.delete(listener);
+}
+
+export function droppedWrites(): DroppedWrite[] {
+  return [...dropped];
+}
+
+/** Called once the technician has read them. */
+export function clearDropped(): void {
+  dropped.length = 0;
+  for (const listener of dropListeners) listener([]);
+}
+
 async function announce(): Promise<void> {
   const pending = await outbox.pending().catch(() => 0);
   for (const listener of listeners) listener(pending);
@@ -92,7 +129,10 @@ export async function flushOutbox(): Promise<void> {
     const result = await outbox.flush();
     if (result.rejected.length > 0) {
       // Refusals are not retried, so this is the only chance to say so.
-      console.warn('[outbox] refused permanently', result.rejected);
+      for (const { item, reason } of result.rejected) {
+        dropped.push({ kind: item.kind, reason, at: Date.now() });
+      }
+      for (const listener of dropListeners) listener([...dropped]);
     }
   } finally {
     flushing = false;

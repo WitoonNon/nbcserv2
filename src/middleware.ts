@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { SESSION_COOKIE } from '@/lib/auth/constants';
+import { PUBLIC_PREFIXES, SESSION_COOKIE } from '@/lib/auth/constants';
 
 /**
  * Edge-level gate.
@@ -12,16 +12,6 @@ import { SESSION_COOKIE } from '@/lib/auth/constants';
  * page and `assertPermission` in each server action. A forged cookie gets past
  * this middleware and is then rejected by the database lookup.
  */
-
-/**
- * Reachable without logging in.
- *
- * `/api/cron` is here because the scheduler has no session cookie — it
- * authenticates with a bearer secret that only the route handler can check.
- * Redirecting it to /login would turn every scheduled run into a silent no-op
- * that still reports success.
- */
-const PUBLIC_PREFIXES = ['/login', '/forbidden', '/booking', '/track', '/api/media', '/api/cron'];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

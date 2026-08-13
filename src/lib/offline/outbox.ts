@@ -147,9 +147,32 @@ export class Outbox {
  * fetch() rejects for a dead connection and resolves for an HTTP error, so the
  * distinction is: a thrown fetch, or a 5xx/408/429, is worth retrying. Anything
  * else the server said deliberately, and repeating it will get the same answer.
+ *
+ * Three cases are deliberately NOT treated as a deliberate refusal:
+ *
+ * - **A redirect.** Senders use `redirect: 'manual'`, which surfaces as an
+ *   opaque response with status 0. Following it instead would land on the
+ *   login page, whose 200 reads as success — and the queued write would be
+ *   deleted having never reached the server.
+ * - **401.** The session expired while the work sat in the queue. That is the
+ *   normal shape of "signed a form on a rooftop, synced tomorrow", and the
+ *   item becomes sendable again the moment the technician logs back in.
+ *   Discarding it would throw away a visit for a reason the technician can fix.
+ * - **408/429/5xx**, as before.
+ *
+ * 403 stays permanent: the session is valid and the answer will not change.
  */
 export function outcomeFromResponse(res: Response, reason: string): SendOutcome {
   if (res.ok) return { status: 'sent' };
+
+  // `type` is 'opaqueredirect' under redirect:'manual'; status 0 also covers
+  // an opaque response from any other cause, which we equally cannot read.
+  if (res.status === 0 || res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+    return { status: 'offline', reason: `${reason} — ถูกเปลี่ยนเส้นทาง (เซสชันอาจหมดอายุ)` };
+  }
+  if (res.status === 401) {
+    return { status: 'offline', reason: 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่แล้วระบบจะส่งให้เอง' };
+  }
   if (res.status >= 500 || res.status === 408 || res.status === 429) {
     return { status: 'offline', reason };
   }

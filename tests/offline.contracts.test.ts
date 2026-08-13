@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { workOrderMediaKey, mediaKey } from '../src/lib/media/key';
 import { payloadHash, payloadHashMatches, stableStringify } from '../src/lib/forms/payload-hash';
+import { OFFLINE_QUEUE_PREFIXES, PUBLIC_PREFIXES } from '../src/lib/auth/constants';
 
 /**
  * The two agreements that make offline work safe.
@@ -16,6 +17,21 @@ import { payloadHash, payloadHashMatches, stableStringify } from '../src/lib/for
  *
  * Pure functions — no browser, no database.
  */
+
+describe('the queue can be told "no" instead of being redirected', () => {
+  it('lets every replayed endpoint past the edge gate so it can answer 401', () => {
+    // The bug this pins: /api/field was not listed, so a POST without a session
+    // was redirected to /login. fetch followed it, the login page answered 200,
+    // and the outbox read that as delivered and deleted the item — a visit
+    // recorded on a rooftop vanished with no error anywhere.
+    //
+    // Being listed does not make these open: each one authenticates itself and
+    // returns a status code, which is exactly what the queue needs to read.
+    for (const prefix of OFFLINE_QUEUE_PREFIXES) {
+      expect(PUBLIC_PREFIXES).toContain(prefix);
+    }
+  });
+});
 
 describe('a photo taken offline knows its own name', () => {
   const captured = new Date('2026-08-11T16:45:00+07:00');

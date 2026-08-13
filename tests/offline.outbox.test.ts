@@ -200,6 +200,30 @@ describe('reading an HTTP response', () => {
     expect(outcome(200).status).toBe('sent');
     expect(outcome(201).status).toBe('sent');
   });
+
+  it('keeps work when the session expired rather than discarding it', () => {
+    // A form signed on a rooftop and synced the next morning meets a dead
+    // session. The technician can fix that by logging in; deleting their visit
+    // for it would be throwing away the thing the queue exists to protect.
+    expect(outcome(401).status).toBe('offline');
+  });
+
+  it('never reads a redirect as delivered', () => {
+    // The bug this pins: /api/field/advance without a session was redirected
+    // to /login, fetch followed it, and the login page's 200 was read as
+    // "sent" — so a queued status change was deleted having never arrived.
+    //
+    // Built by hand rather than with `new Response`: the constructor rejects
+    // both status 0 and the redirect codes, which is precisely why these
+    // responses only ever arrive from fetch under redirect:'manual'.
+    const opaque = { ok: false, status: 0, type: 'opaqueredirect' } as unknown as Response;
+    const redirected = (status: number) =>
+      ({ ok: false, status, type: 'basic' }) as unknown as Response;
+
+    expect(outcomeFromResponse(opaque, 'why').status).toBe('offline');
+    expect(outcomeFromResponse(redirected(302), 'why').status).toBe('offline');
+    expect(outcomeFromResponse(redirected(307), 'why').status).toBe('offline');
+  });
 });
 
 describe('queue identity', () => {
