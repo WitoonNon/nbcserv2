@@ -15,6 +15,7 @@ import {
   WorkOrderError,
 } from '@/modules/workorders/workorder.service';
 import { assertPermission, ForbiddenError } from '@/lib/auth/guard';
+import { canEditWorkOrder } from '@/modules/workorders/access';
 
 export interface WorkOrderState {
   error?: string;
@@ -22,6 +23,19 @@ export interface WorkOrderState {
   /** Field key -> message, so the renderer can mark the offending inputs. */
   fieldErrors?: Record<string, string>;
   savedAt?: string;
+}
+
+/**
+ * The permission decides whether this account edits work orders at all; this
+ * decides whether it edits THIS one. Both are needed — `workorder.submit`
+ * belongs to every technician, not to one crew.
+ */
+async function assertOwnWorkOrder(permission: string, workOrderId: string) {
+  const actor = await assertPermission(permission);
+  if (!(await canEditWorkOrder(actor, workOrderId))) {
+    throw new ForbiddenError('ใบงานนี้ไม่ใช่ของทีมคุณ');
+  }
+  return actor;
 }
 
 function friendlyError(e: unknown): WorkOrderState {
@@ -72,7 +86,7 @@ export async function saveDraftAction(
   if (!workOrderId) return { error: 'ไม่พบใบงาน' };
 
   try {
-    const actor = await assertPermission('workorder.read');
+    const actor = await assertOwnWorkOrder('workorder.read', workOrderId);
     const { updatedAt } = await saveWorkOrderDraft({
       workOrderId,
       payload: readPayload(formData),
@@ -94,7 +108,7 @@ export async function submitAction(
   if (!workOrderId) return { error: 'ไม่พบใบงาน' };
 
   try {
-    const actor = await assertPermission('workorder.submit');
+    const actor = await assertOwnWorkOrder('workorder.submit', workOrderId);
     const result = await submitWorkOrder({
       workOrderId,
       payload: readPayload(formData),
@@ -131,7 +145,7 @@ export async function signAction(
   if (!workOrderId) return { error: 'ไม่พบใบงาน' };
 
   try {
-    const actor = await assertPermission('workorder.read');
+    const actor = await assertOwnWorkOrder('workorder.read', workOrderId);
     const requestHeaders = await headers();
 
     await signWorkOrder({
@@ -168,7 +182,7 @@ export async function approveAction(
   if (!workOrderId) return { error: 'ไม่พบใบงาน' };
 
   try {
-    const actor = await assertPermission('workorder.approve');
+    const actor = await assertOwnWorkOrder('workorder.approve', workOrderId);
     await approveWorkOrder({ workOrderId, actorId: actor.id });
 
     revalidatePath(`/work-orders/d/${workOrderId}`);
@@ -187,7 +201,7 @@ export async function returnAction(
   if (!workOrderId) return { error: 'ไม่พบใบงาน' };
 
   try {
-    const actor = await assertPermission('workorder.approve');
+    const actor = await assertOwnWorkOrder('workorder.approve', workOrderId);
     await returnWorkOrder({ workOrderId, reason, actorId: actor.id });
 
     revalidatePath(`/work-orders/d/${workOrderId}`);

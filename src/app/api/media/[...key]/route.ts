@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
 import { storage } from '@/lib/storage';
 import { findAttachmentByKey } from '@/modules/media/attachment.service';
+import { canViewWorkOrder } from '@/modules/workorders/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,11 @@ export const dynamic = 'force-dynamic';
  * from a public bucket and nothing is served without a session. The key layout
  * is deliberately guessable (yyyymm/entity/id/kind/file), which is exactly why
  * knowing a key must not be enough to read one.
+ *
+ * Nor is holding `workorder.read`. That permission says an account may look at
+ * work orders; it does not say which. The CUSTOMER role holds it, so without
+ * the ownership check below, one customer could fetch photographs from inside
+ * another customer's home the moment customer logins exist.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ key: string[] }> }) {
   const user = await getSessionUser();
@@ -29,6 +35,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ key: string[] }
   // would hand out anything in the bucket that a caller could name.
   const attachment = await findAttachmentByKey(key);
   if (!attachment) {
+    return NextResponse.json({ error: 'ไม่พบไฟล์' }, { status: 404 });
+  }
+
+  // Work-order media is the only kind there is so far; anything else has no
+  // rule written for it yet and is refused rather than guessed at.
+  if (attachment.entityType !== 'WorkOrder') {
+    return NextResponse.json({ error: 'ไม่มีสิทธิ์ดูไฟล์นี้' }, { status: 403 });
+  }
+  if (!(await canViewWorkOrder(user, attachment.entityId))) {
+    // 404, not 403: the caller is not entitled to know this key exists, and a
+    // 403 on a guessable key confirms that it does.
     return NextResponse.json({ error: 'ไม่พบไฟล์' }, { status: 404 });
   }
 

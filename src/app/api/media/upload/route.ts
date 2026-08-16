@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { AttachmentKind } from '@/generated/prisma';
 import { getSessionUser } from '@/lib/auth/session';
 import { attachToWorkOrder, MAX_UPLOAD_BYTES, MediaError } from '@/modules/media/attachment.service';
+import { canEditWorkOrder } from '@/modules/workorders/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,13 @@ export async function POST(req: Request) {
   }
   if (!VALID_KINDS.has(kind)) {
     return NextResponse.json({ error: 'ประเภทรูปไม่ถูกต้อง' }, { status: 400 });
+  }
+  // Holding `workorder.read` is not the same as having anything to do with
+  // THIS work order. Attaching is narrower still than viewing: a customer may
+  // look at photographs of their own visit, but must not be able to put files
+  // into the company's records.
+  if (!(await canEditWorkOrder(user, workOrderId))) {
+    return NextResponse.json({ error: 'ไม่มีสิทธิ์แนบรูปในใบงานนี้' }, { status: 403 });
   }
   // Checked before the body is read into memory, so an oversized upload is
   // refused rather than buffered.

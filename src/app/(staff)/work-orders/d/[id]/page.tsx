@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getWorkOrder } from '@/modules/workorders/workorder.service';
 import { requirePermission, can } from '@/lib/auth/guard';
+import { canViewWorkOrder } from '@/modules/workorders/access';
 import { WorkOrderEditor } from '@/components/forms/WorkOrderEditor';
 import { formatThaiDate } from '@/lib/date/buddhist';
 
@@ -18,6 +19,11 @@ export default async function WorkOrderDocumentPage({
 }) {
   const { id } = await params;
   const user = await requirePermission('workorder.read', `/work-orders/d/${id}`);
+
+  // The permission says this account may look at work orders, not at this one.
+  // Without the scope check a technician could open another crew's document —
+  // which carries the customer's name, telephone and address.
+  if (!(await canViewWorkOrder(user, id))) notFound();
 
   let workOrder;
   try {
