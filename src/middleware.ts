@@ -29,6 +29,12 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Everything except Next internals and static brand assets.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|brand/).*)'],
+  // Everything except Next internals, static brand assets, and the files
+  // crawlers fetch anonymously.
+  //
+  // robots.txt and sitemap.xml have to be excluded here rather than added to
+  // PUBLIC_PREFIXES: a crawler arrives with no cookie, so the gate would
+  // redirect it to /login, and it would read the login page's HTML as the
+  // contents of robots.txt. The rules would silently never apply.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|brand/|robots.txt|sitemap.xml).*)'],
 };

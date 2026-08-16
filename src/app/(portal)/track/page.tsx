@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { trackJob } from '@/modules/jobs/tracking.service';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -7,6 +8,28 @@ import { formatTHB } from '@/lib/utils';
 import type { ServiceCategory } from '@/generated/prisma';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The empty form is a useful page to find; a result is somebody's job number,
+ * phone number and address sitting in a URL.
+ *
+ * robots.txt already refuses to crawl the query form, but that only asks a
+ * crawler not to look. Someone pasting their tracking link into a public group
+ * is a different route in, and this is what stops that page being kept.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Search>;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+  const isResult = Boolean(sp.jobNo || sp.phone);
+
+  return {
+    title: 'ติดตามสถานะงาน',
+    ...(isResult ? { robots: { index: false, follow: false } } : {}),
+  };
+}
 
 const inputCls =
   'w-full border border-[var(--color-line)] rounded-[3px] px-3 py-2 text-sm bg-white ' +
