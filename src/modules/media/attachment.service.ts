@@ -176,7 +176,7 @@ export async function attachToWorkOrder(params: {
   // its contents is not.
   const existing = await prisma.attachment.findFirst({
     where: { storageKey: key },
-    select: { id: true, sha256: true },
+    select: { id: true, sha256: true, thumbKey: true },
   });
   if (existing) {
     const sameBytes = existing.sha256 === sha256Hex(params.body);
@@ -186,7 +186,10 @@ export async function attachToWorkOrder(params: {
       key,
       url: mediaUrl(key),
       bytes: params.body.byteLength,
-      hasThumb: true,
+      // Read from the stored row, not assumed: the first upload may have
+      // arrived without a preview, and claiming one exists sends the caller
+      // to `?thumb=1` for a file that was never written.
+      hasThumb: existing.thumbKey !== null,
     };
   }
 

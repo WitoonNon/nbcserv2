@@ -1,5 +1,6 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
+import type { Prisma } from '@/generated/prisma';
 import type { SessionUser } from '@/lib/auth/session';
 
 /**
@@ -51,45 +52,50 @@ async function customerIdFor(userId: string): Promise<string | null> {
 }
 
 /**
- * May this user see this work order?
+ * The set of work orders this user may see, as a query filter.
  *
- * One query per scope, matching on the job the work order belongs to.
+ * Returned as a `where` rather than a boolean so that asking about ONE work
+ * order and LISTING them use the same rule. A list built from its own
+ * hand-written filter is a second copy of this policy, and the copy is the one
+ * that eventually disagrees.
+ *
+ * `null` means "no work orders at all" — distinct from `{}`, which means
+ * "every work order" and is what the office gets.
  */
-export async function canViewWorkOrder(user: SessionUser, workOrderId: string): Promise<boolean> {
+export async function visibleWorkOrdersWhere(
+  user: SessionUser,
+): Promise<Prisma.WorkOrderWhereInput | null> {
   const scope = scopeFor(user);
-  if (scope === 'NONE') return false;
-  if (scope === 'ALL') {
-    const exists = await prisma.workOrder.findUnique({
-      where: { id: workOrderId },
-      select: { id: true },
-    });
-    return exists !== null;
-  }
+  if (scope === 'NONE') return null;
+  if (scope === 'ALL') return {};
 
   if (scope === 'CREW') {
-    const match = await prisma.workOrder.findFirst({
-      where: {
-        id: workOrderId,
-        job: {
-          assignments: {
-            some: {
-              // A withdrawn crew loses access with the assignment. The same
-              // predicate decides what appears in their queue.
-              unassignedAt: null,
-              crew: { members: { some: { technicianId: user.technicianId!, validTo: null } } },
-            },
+    return {
+      job: {
+        assignments: {
+          some: {
+            // A withdrawn crew loses access with the assignment. The same
+            // predicate decides what appears in their queue.
+            unassignedAt: null,
+            crew: { members: { some: { technicianId: user.technicianId!, validTo: null } } },
           },
         },
       },
-      select: { id: true },
-    });
-    return match !== null;
+    };
   }
 
   const customerId = await customerIdFor(user.id);
-  if (!customerId) return false;
+  if (!customerId) return null;
+  return { job: { customerId } };
+}
+
+/** May this user see this work order? */
+export async function canViewWorkOrder(user: SessionUser, workOrderId: string): Promise<boolean> {
+  const where = await visibleWorkOrdersWhere(user);
+  if (where === null) return false;
+
   const match = await prisma.workOrder.findFirst({
-    where: { id: workOrderId, job: { customerId } },
+    where: { ...where, id: workOrderId },
     select: { id: true },
   });
   return match !== null;

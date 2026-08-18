@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db';
 import { payloadHash, payloadHashMatches } from '@/lib/forms/payload-hash';
 import type { FormCode, Prisma, SignerRole, WorkOrderStatus } from '@/generated/prisma';
 import { buildValidator, flattenFields, type FormSchema } from '@/lib/forms/types';
+import type { SessionUser } from '@/lib/auth/session';
+import { visibleWorkOrdersWhere } from './access';
 import { nextDocumentNo } from './sequence.service';
 
 /**
@@ -467,4 +469,100 @@ export async function returnWorkOrder(params: {
       approvedAt: null,
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Review queue
+// ---------------------------------------------------------------------------
+
+export interface WorkOrderListRow {
+  id: string;
+  docNo: string;
+  templateCode: FormCode;
+  status: WorkOrderStatus;
+  jobNo: string;
+  customerName: string;
+  submittedByName: string | null;
+  submittedAt: string | null;
+  updatedAt: string;
+  /** True when the form was edited after somebody signed it. */
+  hasStaleSignature: boolean;
+}
+
+/**
+ * Work orders this user may see, newest activity first.
+ *
+ * Exists because a supervisor had no way to find what was waiting for them:
+ * approving meant knowing which job to open first, so a submitted form sat
+ * there until somebody happened to look. The filter comes from
+ * visibleWorkOrdersWhere() rather than being written again here.
+ */
+export async function listWorkOrders(
+  user: SessionUser,
+  filter?: { status?: WorkOrderStatus },
+): Promise<WorkOrderListRow[]> {
+  const scope = await visibleWorkOrdersWhere(user);
+  if (scope === null) return [];
+
+  const rows = await prisma.workOrder.findMany({
+    where: { ...scope, ...(filter?.status ? { status: filter.status } : {}) },
+    orderBy: { updatedAt: 'desc' },
+    // A queue nobody has cleared for months should still open quickly; the
+    // oldest items are reachable by filtering rather than by scrolling.
+    take: 200,
+    select: {
+      id: true,
+      docNo: true,
+      templateCode: true,
+      status: true,
+      payload: true,
+      updatedAt: true,
+      submittedAt: true,
+      submittedBy: { select: { name: true } },
+      signatures: { select: { payloadHash: true } },
+      job: { select: { jobNo: true, customer: { select: { displayName: true } } } },
+    },
+  });
+
+  return Promise.all(
+    rows.map(async (r) => {
+      const currentHash = await payloadHash((r.payload ?? {}) as Record<string, unknown>);
+      return {
+        id: r.id,
+        docNo: r.docNo,
+        templateCode: r.templateCode,
+        status: r.status,
+        jobNo: r.job.jobNo,
+        customerName: r.job.customer.displayName,
+        submittedByName: r.submittedBy?.name ?? null,
+        submittedAt: r.submittedAt?.toISOString() ?? null,
+        updatedAt: r.updatedAt.toISOString(),
+        // Worth surfacing in the queue itself: an approver should know before
+        // opening it that the document changed after it was signed.
+        hasStaleSignature: r.signatures.some((s) => s.payloadHash !== currentHash),
+      };
+    }),
+  );
+}
+
+/** How many work orders are sitting in each status, for the queue tabs. */
+export async function countWorkOrdersByStatus(
+  user: SessionUser,
+): Promise<Record<WorkOrderStatus, number>> {
+  const empty = { DRAFT: 0, SUBMITTED: 0, APPROVED: 0, RETURNED: 0 } as Record<
+    WorkOrderStatus,
+    number
+  >;
+
+  const scope = await visibleWorkOrdersWhere(user);
+  if (scope === null) return empty;
+
+  const grouped = await prisma.workOrder.groupBy({
+    by: ['status'],
+    where: scope,
+    _count: { _all: true },
+  });
+
+  for (const g of grouped) empty[g.status] = g._count._all;
+  return empty;
 }

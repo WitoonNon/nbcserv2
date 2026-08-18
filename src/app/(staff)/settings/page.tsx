@@ -51,7 +51,7 @@ export default async function SettingsPage() {
       warn: true,
     },
     {
-      href: '/work-orders',
+      href: '/work-orders/templates',
       title: 'แบบฟอร์มใบงาน',
       desc: 'ใบตรวจเช็ค/แจ้งซ่อม · ใบล้าง/PM · ใบซ่อม พร้อมการจัดการเวอร์ชัน',
       meta: counts ? `${counts.forms} ฟอร์ม` : null,

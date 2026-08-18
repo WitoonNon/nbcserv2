@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { prisma } from '../src/lib/db';
 import type { SessionUser } from '../src/lib/auth/session';
 import { canEditWorkOrder, canViewWorkOrder, scopeFor } from '../src/modules/workorders/access';
-import { createWorkOrder } from '../src/modules/workorders/workorder.service';
+import { createWorkOrder, listWorkOrders } from '../src/modules/workorders/workorder.service';
 
 /**
  * Who a work order is any of.
@@ -247,5 +247,49 @@ describe('adding to a work order', () => {
 
     expect(await canViewWorkOrder(owner, workOrderA)).toBe(true);
     expect(await canEditWorkOrder(owner, workOrderA)).toBe(false);
+  });
+});
+
+describe('the queue shows the same work orders the page would open', () => {
+  /**
+   * The listing and the single-document check are two doors onto the same
+   * data. A queue built from its own hand-written filter is a second copy of
+   * the access policy, and the copy is the one that eventually disagrees —
+   * silently, by showing a supervisor's row to a technician who then cannot
+   * open it, or worse, one they can.
+   */
+  const seen = (rows: { id: string }[]) => rows.map((r) => r.id);
+
+  it('lists it for the office', async () => {
+    const office = sessionUser({ id: 'admin', roles: ['ADMIN'] });
+    expect(seen(await listWorkOrders(office))).toContain(workOrderA);
+  });
+
+  it('lists it for the assigned crew but not another crew', async () => {
+    const mine = sessionUser({ id: 'tech', roles: ['TECHNICIAN'], technicianId: myTechnicianId });
+    const theirs = sessionUser({ id: 'tech2', roles: ['TECHNICIAN'], technicianId: otherTechnicianId });
+
+    expect(seen(await listWorkOrders(mine))).toContain(workOrderA);
+    expect(seen(await listWorkOrders(theirs))).not.toContain(workOrderA);
+  });
+
+  it('shows a customer their own and nobody elses', async () => {
+    const owner = sessionUser({ id: customerAUserId, roles: ['CUSTOMER'] });
+    const other = sessionUser({ id: customerBUserId, roles: ['CUSTOMER'] });
+
+    expect(seen(await listWorkOrders(owner))).toContain(workOrderA);
+    expect(seen(await listWorkOrders(other))).not.toContain(workOrderA);
+  });
+
+  it('returns nothing for an account with the permission but no role behind it', async () => {
+    // The default that used to be "yes". A listing that leaked here would hand
+    // over every customer's name and address in one response.
+    const nobody = sessionUser({ id: 'ghost', roles: [] });
+    expect(await listWorkOrders(nobody)).toEqual([]);
+  });
+
+  it('filters by status without widening what is visible', async () => {
+    const theirs = sessionUser({ id: 'tech2', roles: ['TECHNICIAN'], technicianId: otherTechnicianId });
+    expect(await listWorkOrders(theirs, { status: 'DRAFT' })).toEqual([]);
   });
 });
