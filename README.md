@@ -300,6 +300,7 @@ npm test
 | `docs/00-SYSTEM-BLUEPRINT.md` | วิเคราะห์ธุรกิจ สถาปัตยกรรม เหตุผลการออกแบบฐานข้อมูล |
 | `docs/01-BUILD-PLAN-SKELETON.md` | แผนการพัฒนาและทะเบียนค่าสมมติ |
 | `docs/02-CLIENT-DATA-CHECKLIST.md` | แบบสอบถามข้อมูลจากลูกค้า (ไทย-อังกฤษ) |
+| **`docs/06-SPEC-LINE-NOTIFY.md`** | **สเปคงานแจ้งเตือน LINE (2.6) สำหรับคนที่มารับงานต่อ** |
 | **`docs/03-PHASE-ROADMAP.md`** | **แผนงานเฟส 1·2·3 เรียงลำดับพร้อมเกณฑ์ว่าเสร็จ — อ่านไฟล์นี้ก่อนเริ่มงาน** |
 | `docs/NBC-REQ-001-Client-Data-Checklist-TH.pdf` | ฉบับ PDF สำหรับส่งลูกค้า |
 

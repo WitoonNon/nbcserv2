@@ -1,0 +1,168 @@
+# สเปคงาน 2.6 — แจ้งเตือนลูกค้าผ่าน LINE
+
+> เขียนเมื่อ 18 สิงหาคม 2569 · ตรวจกับโค้ดจริงทุกบรรทัด
+> อ่าน [`03-PHASE-ROADMAP.md`](03-PHASE-ROADMAP.md) ก่อนถ้ายังไม่เคยแตะโปรเจกต์นี้
+
+---
+
+## สรุปงานใน 3 บรรทัด
+
+ระบบเตรียมช่องทางแจ้งเตือนไว้หมดแล้ว — มี adapter, มีข้อความ 5 แบบ, มีตารางเก็บ log
+**ที่ยังไม่มีคือตัวส่งจริง และคำตอบว่า "จะส่งหาใคร"**
+ข้อหลังคือของยาก อ่านหัวข้อ **"ปัญหาที่ต้องแก้ก่อนเขียนโค้ดบรรทัดแรก"** ให้จบก่อนเริ่ม
+
+---
+
+## ของที่มีอยู่แล้ว ไม่ต้องสร้างใหม่
+
+| ไฟล์ / ตาราง | มีอะไร |
+|---|---|
+| `src/lib/notify/index.ts` | `NotificationChannelAdapter` + `notifier()` เลือก adapter จาก `NOTIFY_DRIVER` · `LineAdapter` มีโครงแต่ `send()` คืน error ไว้ |
+| `NotificationTemplate` | ข้อความ 5 แบบ seed แล้ว ใช้ `{{placeholder}}` |
+| `NotificationLog` | `status` = `QUEUED / SENT / FAILED` · มี `jobId`, `error`, `sentAt` |
+| `CustomerIdentity` | `provider = LINE` + `externalId` — **ที่เก็บ LINE userId มีอยู่แล้ว ไม่ต้อง migrate** |
+| `src/lib/env.ts` | `LINE_CHANNEL_ACCESS_TOKEN` ประกาศไว้แล้ว (ต้องเพิ่ม `LINE_CHANNEL_SECRET`) |
+
+**ข้อความที่ seed ไว้** — `prisma/seed/06-forms.ts`
+
+```
+JOB_CONFIRMED     ยืนยันรับงาน {{jobNo}} วันที่ {{scheduledDate}} ติดตามที่ {{trackUrl}}
+TECH_EN_ROUTE     ช่างกำลังเดินทาง {{jobNo}} ถึงประมาณ {{eta}}
+TECH_ON_SITE      ช่างถึงหน้างานแล้ว {{jobNo}}
+QUOTATION_SENT    ใบเสนอราคา {{quotationNo}} ยอด {{grandTotal}} ดูที่ {{quoteUrl}}
+WORK_ORDER_READY  งาน {{jobNo}} เสร็จแล้ว ดาวน์โหลด {{docNo}} ที่ {{pdfUrl}}
+```
+
+> `WORK_ORDER_READY` อ้าง `{{pdfUrl}}` ซึ่ง **ยังไม่มี** (ข้อ 2.4) — ตัวนี้ทำทีหลัง
+
+**ยังไม่มีใครเรียก `notifier()` เลยสักที่** — grep แล้วได้ศูนย์ ทุกจุดส่งต้องต่อใหม่หมด
+
+---
+
+## ปัญหาที่ต้องแก้ก่อนเขียนโค้ดบรรทัดแรก
+
+**LINE ส่งข้อความหาคนที่ยังไม่ได้เพิ่มเพื่อนไม่ได้ และเราไม่มี LINE userId ของลูกค้า**
+
+ตอนลูกค้าจองคิวบนเว็บ เราได้แค่ **ชื่อ + เบอร์โทร + ที่อยู่** ส่วน LINE userId
+เป็นรหัสที่ LINE ออกให้เฉพาะคู่ (ลูกค้า ↔ OA ของเรา) และจะได้มาก็ต่อเมื่อ
+**ลูกค้าเพิ่ม @nbcservice เป็นเพื่อนแล้ว และเราได้รับ event จาก webhook**
+
+เบอร์โทรแปลงเป็น LINE userId ไม่ได้ ไม่มี API ไหนทำได้
+
+### ทางเลือก
+
+| แบบ | วิธี | ข้อดี | ข้อเสีย |
+|---|---|---|---|
+| **ก. รหัสผูกบัญชี** | จองเสร็จ → แสดง QR เพิ่มเพื่อน + บอกให้พิมพ์ **เลขที่งาน** ทักเข้ามา → webhook จับคู่ | ทำได้เร็ว ไม่ต้องขอ channel เพิ่ม | ลูกค้าต้องลงมือเอง จะมีคนไม่ทำ |
+| ข. LINE Login | ใส่ปุ่ม "เข้าสู่ระบบด้วย LINE" ที่หน้าจอง ได้ userId ทันที | ลูกค้าไม่ต้องทำอะไรเพิ่ม | ต้องขอ **LINE Login channel** อีกตัว + งานเพิ่ม |
+| ค. Account Link | ฟีเจอร์ทางการของ Messaging API | มาตรฐานสุด | งานเยอะสุด เกินความจำเป็นตอนนี้ |
+
+**แนะนำ ก. ก่อน** แล้วค่อยเติม ข. ทีหลังถ้าลูกค้าอยากได้ —
+โครง `CustomerIdentity` รองรับทั้งสองแบบอยู่แล้ว ไม่ต้องรื้อ
+
+### เส้นทางหา userId เมื่อผูกแล้ว
+
+```
+Job → Customer → CustomerContact → CustomerIdentity(provider: LINE).externalId
+```
+
+ทุกความสัมพันธ์นี้มีใน schema แล้ว **ไม่ต้อง migrate**
+สิ่งที่ต้องเพิ่มคือ *ตอนไหน* ที่จะเขียน `CustomerIdentity` ลงไป
+
+---
+
+## งานที่ต้องทำ เรียงตามลำดับ
+
+### 1. ทำให้ `LineAdapter.send()` ส่งได้จริง
+
+`src/lib/notify/index.ts` — เรียก `POST https://api.line.me/v2/bot/message/push`
+พร้อม `Authorization: Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+
+**กติกา**
+- คืน `{ ok: false, error }` เสมอเมื่อล้ม **ห้าม throw** — ผู้เรียกต้องบันทึก log ได้
+- **แยก "ส่งไม่ได้ชั่วคราว" ออกจาก "ส่งไม่ได้ถาวร"** — LINE ตอบ `429` (เกินโควตา) กับ `5xx`
+  คือลองใหม่ได้ ส่วน `400` (userId ผิด) กับ `403` (ลูกค้าบล็อก OA) คือถาวร
+  *เหตุผลเดียวกับบั๊กคิวออฟไลน์ที่เคยเจอ — ดู `outcomeFromResponse` ใน `src/lib/offline/outbox.ts` ใช้แนวเดียวกัน*
+- ไม่มี token → คืน error ที่อ่านรู้เรื่อง ไม่ใช่ปล่อยพัง
+
+### 2. Webhook รับ event จาก LINE
+
+สร้าง `src/app/api/line/webhook/route.ts`
+
+**ต้องมี**
+- **ตรวจลายเซ็น `x-line-signature`** ด้วย HMAC-SHA256 กับ `LINE_CHANNEL_SECRET`
+  ไม่ตรง → `401` · **ข้อนี้ห้ามข้าม** ไม่งั้นใครก็ปลอม event มาผูกบัญชีคนอื่นได้
+- เพิ่ม `/api/line` เข้า `PUBLIC_PREFIXES` ใน `src/lib/auth/constants.ts`
+  *(LINE ไม่มี session cookie — ถ้าไม่เพิ่ม middleware จะ redirect ไปหน้า login
+  แล้ว LINE จะได้ 200 จากหน้า login และคิดว่าส่งสำเร็จ เคยเป็นบั๊กจริงมาแล้ว)*
+- ตอบ `200` ให้เร็ว งานหนักแยกไปทำทีหลัง — LINE timeout สั้น
+
+**event ที่ต้องรองรับ**
+
+| event | ทำอะไร |
+|---|---|
+| `follow` | เก็บ userId ไว้ก่อน ยังไม่รู้ว่าเป็นลูกค้าคนไหน · ตอบข้อความบอกวิธีผูก |
+| `message` (ข้อความ) | ถ้าตรงรูปแบบเลขที่งาน → หาลูกค้าจากงานนั้น → เขียน `CustomerIdentity` |
+| `unfollow` | **ลบ `CustomerIdentity`** — ลูกค้าบล็อกแล้ว ส่งต่อไปก็ล้มและเปลืองโควตา |
+
+### 3. ส่งจริงตอนไหน
+
+| ตอน | template | จุดในโค้ด |
+|---|---|---|
+| ลูกค้าจองคิวสำเร็จ | `JOB_CONFIRMED` | `createJobFromBooking()` ใน `src/modules/jobs/job.service.ts` |
+| ช่างกดออกเดินทาง | `TECH_EN_ROUTE` | `advanceFieldJob()` ใน `src/modules/jobs/field-work.service.ts` |
+| ช่างกดถึงหน้างาน | `TECH_ON_SITE` | เดียวกัน |
+
+**ห้ามส่งในทรานแซกชันเดียวกับการจอง** — LINE ล่มต้องไม่ทำให้ลูกค้าจองไม่ได้
+ให้เขียน `NotificationLog` สถานะ `QUEUED` ในทรานแซกชัน แล้วส่งทีหลัง
+
+### 4. ตัวส่งคิว
+
+เพิ่ม `src/app/api/cron/send-notifications/route.ts` — ลอกแบบจาก
+`src/app/api/cron/sweep-holds/route.ts` ได้เลย (มี `authorizeCron()` ให้แล้ว)
+
+- หยิบ `NotificationLog` ที่ `status = QUEUED` มาส่ง
+- สำเร็จ → `SENT` + `sentAt` · ล้มถาวร → `FAILED` + `error` · ล้มชั่วคราว → คงไว้ `QUEUED`
+- เพิ่ม path ใน `vercel.json`
+  ⚠️ **Vercel Hobby รัน cron ได้วันละครั้งเท่านั้น** — ถ้าลูกค้าต้องการแจ้งเตือนทันที
+  ต้องอัปเป็น Pro หรือส่งแบบ fire-and-forget หลัง response แล้วใช้ cron เป็นตัวเก็บตก
+
+---
+
+## กฎที่ห้ามพลาด
+
+1. **ส่งซ้ำไม่ได้** — ลูกค้าได้ข้อความเดิม 3 รอบคือความรำคาญที่ลูกค้าจำได้
+   ใส่ unique ที่ (`jobId`, `templateCode`) หรือเช็คก่อนสร้างแถว
+2. **LINE ล่ม ต้องไม่ทำให้จองคิวไม่ได้** — แจ้งเตือนคือของแถม การจองคือธุรกิจ
+3. **ลูกค้าบล็อก = หยุดส่ง** ไม่ใช่ retry ไปเรื่อย ๆ
+4. **ห้าม log เนื้อหาข้อความกับ userId ปนกันใน console** — เป็นข้อมูลส่วนบุคคล
+   `NotificationLog.payload` เก็บได้ แต่อย่า `console.log` ออกมา
+5. **push message มีโควตา** — แผนฟรีของ LINE OA จำกัดจำนวนข้อความต่อเดือน
+   ถ้าเกินจะส่งไม่ออกเงียบ ๆ **ต้องบอกลูกค้าเรื่องนี้ก่อนเปิดใช้**
+
+---
+
+## ทดสอบยังไง
+
+- **Adapter** — mock `fetch` ทดสอบว่าแยก 429/5xx (ลองใหม่) ออกจาก 400/403 (เลิก) ถูก
+- **Webhook** — ทดสอบ **ลายเซ็นผิดต้องได้ 401** เป็นข้อแรก
+- **ผูกบัญชี** — พิมพ์เลขงานถูก → มี `CustomerIdentity` · พิมพ์เลขมั่ว → ไม่มี และไม่ควรบอกว่าเลขนั้นมีจริงไหม
+- **คิว** — ส่งล้มชั่วคราวแล้วแถวต้องยังอยู่ `QUEUED` (แบบเดียวกับ `tests/offline.outbox.test.ts`)
+- เทสต์ที่แตะ DB ใช้แบบเดียวกับไฟล์อื่นใน `tests/` — รันกับ Postgres จริง
+
+---
+
+## ยังต้องได้จากลูกค้าก่อนถึงจะ deploy ได้
+
+| | หาได้ที่ไหน |
+|---|---|
+| `LINE_CHANNEL_SECRET` | LINE Developers → Channel ของ @nbcservice → Basic settings |
+| `LINE_CHANNEL_ACCESS_TOKEN` | Channel เดียวกัน → Messaging API |
+| สิทธิ์ตั้งค่า Webhook URL | ต้องเปิด "Use webhook" และใส่ URL ของเรา |
+
+**ทางที่ง่ายกว่าคือขอเป็นแอดมินของ LINE OA** แล้วดึงเองทั้งหมด —
+ปลอดภัยกว่าให้ลูกค้าส่ง token มาทางแชทด้วย เพราะ token หลุด = ส่ง LINE
+ในนามบริษัทได้ทันที
+
+> ตั้งค่าเสร็จแล้วเปลี่ยน `NOTIFY_DRIVER` จาก `console` เป็น `line` บน Vercel
+> ระหว่างพัฒนาใช้ `console` ได้ตลอด ไม่ต้องมี token
