@@ -33,6 +33,17 @@ model Attachment {
   uploadedById String?
   createdAt    DateTime @default(now())
 
+  /// True when this was attached after the work order was handed in.
+  ///
+  /// The client asked for the office to be able to add a photograph a
+  /// technician forgot. Such a photograph is genuine evidence, but it is NOT
+  /// what the customer signed: it never entered the payload the signature
+  /// hashes. Marking it keeps both facts true at once — the picture is
+  /// available, and nobody can later present it as part of the signed set.
+  addedAfterSubmit Boolean @default(false)
+  /// Why it was added late. Required when addedAfterSubmit is true.
+  addedReason      String?
+
   uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId, kind])

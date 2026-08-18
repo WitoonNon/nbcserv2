@@ -5,10 +5,12 @@ import { createWorkOrder, submitWorkOrder } from '../src/modules/workorders/work
 import {
   attachToWorkOrder,
   findAttachmentByKey,
+  listLateAttachments,
   MAX_UPLOAD_BYTES,
   MediaError,
 } from '../src/modules/media/attachment.service';
 import { mediaKey, storage } from '../src/lib/storage';
+import { CAPTURE_KEYS, setCapturePolicy } from '../src/modules/platform/capture-policy';
 
 /**
  * Field photographs against real Postgres and the local storage driver.
@@ -31,7 +33,14 @@ const PNG_1PX = Buffer.from(
 let jobId: string;
 let actorId: string;
 
+async function resetCapturePolicy() {
+  await prisma.appConfig.deleteMany({
+    where: { key: { in: [CAPTURE_KEYS.takenAt, CAPTURE_KEYS.location] } },
+  });
+}
+
 async function cleanUp() {
+  await resetCapturePolicy();
   const customers = await prisma.customer.findMany({ where: { phone: PHONE }, select: { id: true } });
   const ids = customers.map((c) => c.id);
   if (ids.length === 0) return;
@@ -225,7 +234,11 @@ describe('attaching a field photograph', () => {
     expect((await findAttachmentByKey(result.key))?.thumbKey).toBeNull();
   });
 
-  it('keeps the capture time and position the camera recorded', async () => {
+  it('keeps the capture time and position when the office allows both', async () => {
+    // Location is off by default now that the client can switch it — a
+    // customer's coordinates are personal data, so the safe setting is the one
+    // that survives nobody revisiting it. This asserts the switched-ON case.
+    await setCapturePolicy({ recordTakenAt: true, recordLocation: true });
     const workOrderId = await openDraft();
 
     const { key } = await attachToWorkOrder({
@@ -237,6 +250,21 @@ describe('attaching a field photograph', () => {
     expect(row?.exifTakenAt?.toISOString()).toBe('2026-08-09T07:30:00.000Z');
     expect(row?.lat).toBeCloseTo(13.741667, 5);
     expect(row?.lng).toBeCloseTo(100.5, 5);
+  });
+
+  it('keeps no position at all under the default policy', async () => {
+    const workOrderId = await openDraft();
+
+    const { key } = await attachToWorkOrder({
+      workOrderId, kind: 'BEFORE', mime: 'image/jpeg', body: PNG_1PX, actorId,
+      exif: { takenAt: '2026-08-09T07:30:00.000Z', lat: 13.741667, lng: 100.5 },
+    });
+
+    const row = await findAttachmentByKey(key);
+    // Time still kept — it says nothing about who the customer is.
+    expect(row?.exifTakenAt?.toISOString()).toBe('2026-08-09T07:30:00.000Z');
+    expect(row?.lat).toBeNull();
+    expect(row?.lng).toBeNull();
   });
 
   it('drops metadata that cannot be true', async () => {
@@ -321,5 +349,104 @@ describe('storage keys', () => {
     // never part of the stored key.
     expect(key.endsWith('.jpg')).toBe(true);
     expect(key).toMatch(/\/[0-9a-f-]{36}\.jpg$/);
+  });
+});
+
+describe('adding a photograph the technician forgot', () => {
+  /**
+   * The client asked for the office to be able to supply a photograph after
+   * the visit. The awkward part is not permission — it is that the document
+   * has already been signed, and a signature covers the payload, not the
+   * attachment table. So a late photograph is allowed, but it is recorded as
+   * late, with a reason, and it never joins the signed set silently.
+   */
+  async function submitted() {
+    const workOrderId = await openDraft();
+    await submitWorkOrder({
+      workOrderId,
+      actorId,
+      payload: {
+        customer: { customerName: 'ลูกค้าทดสอบ', tel: PHONE },
+        photosBefore: ['x'],
+        inspectorSign: { inspectorSignature: 'sig-a' },
+        technicianSign: { technicianSignature: 'sig-b' },
+      },
+    });
+    return workOrderId;
+  }
+
+  it('accepts one when a reason is given', async () => {
+    const workOrderId = await submitted();
+
+    const result = await attachToWorkOrder({
+      workOrderId,
+      kind: 'AFTER',
+      mime: 'image/png',
+      body: PNG_1PX,
+      actorId,
+      lateAttach: { reason: 'ช่างลืมถ่ายรูปหลังล้าง' },
+    });
+
+    const stored = await prisma.attachment.findUniqueOrThrow({
+      where: { id: result.id },
+      select: { addedAfterSubmit: true, addedReason: true },
+    });
+    expect(stored.addedAfterSubmit).toBe(true);
+    expect(stored.addedReason).toBe('ช่างลืมถ่ายรูปหลังล้าง');
+  });
+
+  it('refuses one with a blank reason', async () => {
+    const workOrderId = await submitted();
+
+    // An unexplained addition to a signed document is the thing that makes the
+    // document arguable later.
+    await expect(
+      attachToWorkOrder({
+        workOrderId, kind: 'AFTER', mime: 'image/png', body: PNG_1PX, actorId,
+        lateAttach: { reason: '   ' },
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('still refuses when no late attachment was requested at all', async () => {
+    const workOrderId = await submitted();
+    await expect(
+      attachToWorkOrder({
+        workOrderId, kind: 'AFTER', mime: 'image/png', body: PNG_1PX, actorId,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('lists late photographs apart from the ones in the form', async () => {
+    const workOrderId = await openDraft();
+    // Attached while the form was open — part of what was signed.
+    await attachToWorkOrder({
+      workOrderId, kind: 'BEFORE', mime: 'image/png', body: PNG_1PX, actorId,
+    });
+    expect(await listLateAttachments(workOrderId)).toHaveLength(0);
+
+    await submitWorkOrder({
+      workOrderId,
+      actorId,
+      payload: {
+        customer: { customerName: 'ลูกค้าทดสอบ', tel: PHONE },
+        photosBefore: ['x'],
+        inspectorSign: { inspectorSignature: 'sig-a' },
+        technicianSign: { technicianSignature: 'sig-b' },
+      },
+    });
+    await attachToWorkOrder({
+      workOrderId,
+      kind: 'AFTER',
+      mime: 'image/png',
+      body: Buffer.concat([PNG_1PX, Buffer.from([0])]),
+      actorId,
+      lateAttach: { reason: 'ลูกค้าขอรูปเพิ่ม' },
+    });
+
+    const late = await listLateAttachments(workOrderId);
+    expect(late).toHaveLength(1);
+    expect(late[0]!.reason).toBe('ลูกค้าขอรูปเพิ่ม');
+    expect(late[0]!.url).toContain('/api/media/');
   });
 });

@@ -57,6 +57,13 @@ export default async function SettingsPage() {
       meta: counts ? `${counts.forms} ฟอร์ม` : null,
     },
     {
+      href: '/settings/capture',
+      title: 'ข้อมูลที่เก็บจากรูปถ่ายหน้างาน',
+      desc: 'เลือกเปิด-ปิดการบันทึกเวลาถ่ายรูป และพิกัด GPS ของรูปที่ช่างถ่าย',
+      meta: 'PDPA',
+      warn: true,
+    },
+    {
       href: '/settings/assumptions',
       title: 'ค่าสมมติที่รอลูกค้ายืนยัน',
       desc: 'ค่าตั้งต้นทั้งหมดที่ระบบใช้อยู่ระหว่างรอข้อมูลจริง แก้ได้โดยไม่ต้องแก้โค้ด',

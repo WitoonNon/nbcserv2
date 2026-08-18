@@ -70,6 +70,18 @@ export async function POST(req: Request) {
   if (!(await canEditWorkOrder(user, workOrderId))) {
     return NextResponse.json({ error: 'ไม่มีสิทธิ์แนบรูปในใบงานนี้' }, { status: 403 });
   }
+
+  // Attaching to a work order that has already been handed in is a different
+  // act from filling one in, so it takes the permission that already governs
+  // reopening a submitted document — not merely being on the crew.
+  const lateReason = String(form.get('lateReason') ?? '').trim();
+  const mayAttachLate = user.permissions.has('workorder.approve');
+  if (lateReason && !mayAttachLate) {
+    return NextResponse.json(
+      { error: 'แนบรูปย้อนหลังได้เฉพาะหัวหน้างานหรือผู้ดูแลระบบ' },
+      { status: 403 },
+    );
+  }
   // Checked before the body is read into memory, so an oversized upload is
   // refused rather than buffered.
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -110,6 +122,7 @@ export async function POST(req: Request) {
         lng: numeric('lng'),
       },
       actorId: user.id,
+      lateAttach: lateReason && mayAttachLate ? { reason: lateReason } : null,
     });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {

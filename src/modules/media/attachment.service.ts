@@ -3,6 +3,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db';
 import type { AttachmentKind } from '@/generated/prisma';
 import { mediaKey, storage } from '@/lib/storage';
+import {
+  CAPTURE_DEFAULTS,
+  getCapturePolicy,
+  type CapturePolicy,
+} from '@/modules/platform/capture-policy';
 
 /**
  * Field photographs (Phase 2.2).
@@ -49,7 +54,15 @@ const ALLOWED_IMAGE_MIME: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+/** A work order still being filled in accepts photographs freely. */
 const ATTACHABLE_STATUSES = new Set(['DRAFT', 'RETURNED']);
+
+/**
+ * Handed in or approved. A photograph may still be added — the client asked
+ * for the office to be able to supply one a technician forgot — but only
+ * deliberately, with a reason, and marked as arriving after the fact.
+ */
+const LATE_ATTACHABLE_STATUSES = new Set(['SUBMITTED', 'APPROVED']);
 
 /** Matches what StorageAdapter.put reports, so re-sends can be compared. */
 function sha256Hex(body: Buffer): string {
@@ -88,16 +101,30 @@ export interface AttachResult {
  * no value at all: a wrong position in a dispute is evidence pointing the
  * wrong way.
  */
-function cleanExif(exif: ExifInput | null | undefined): {
+/**
+ * @param policy what the office has agreed may be kept. Applied HERE, at the
+ *   write, rather than by asking the phone not to send it — a client that
+ *   keeps sending would otherwise still be stored.
+ */
+export function cleanExif(
+  exif: ExifInput | null | undefined,
+  policy: CapturePolicy = CAPTURE_DEFAULTS,
+): {
   exifTakenAt: Date | null;
   lat: number | null;
   lng: number | null;
 } {
-  const lat = typeof exif?.lat === 'number' && Math.abs(exif.lat) <= 90 ? exif.lat : null;
-  const lng = typeof exif?.lng === 'number' && Math.abs(exif.lng) <= 180 ? exif.lng : null;
+  const lat =
+    policy.recordLocation && typeof exif?.lat === 'number' && Math.abs(exif.lat) <= 90
+      ? exif.lat
+      : null;
+  const lng =
+    policy.recordLocation && typeof exif?.lng === 'number' && Math.abs(exif.lng) <= 180
+      ? exif.lng
+      : null;
 
   let exifTakenAt: Date | null = null;
-  if (exif?.takenAt) {
+  if (policy.recordTakenAt && exif?.takenAt) {
     const parsed = new Date(exif.takenAt);
     const plausible =
       !Number.isNaN(parsed.getTime()) &&
@@ -129,6 +156,13 @@ export async function attachToWorkOrder(params: {
   exif?: ExifInput | null;
   actorId?: string | null;
   caption?: string | null;
+  /**
+   * Set to attach to a work order that has already been handed in.
+   *
+   * The caller must have established that this user is allowed to — the route
+   * checks the permission; this records the fact and the reason.
+   */
+  lateAttach?: { reason: string } | null;
 }): Promise<AttachResult> {
   const ext = ALLOWED_IMAGE_MIME[params.mime];
   if (!ext) {
@@ -144,8 +178,22 @@ export async function attachToWorkOrder(params: {
     select: { id: true, status: true },
   });
   if (!workOrder) throw new MediaError('ไม่พบใบงาน', 404);
-  if (!ATTACHABLE_STATUSES.has(workOrder.status)) {
-    throw new MediaError('ใบงานนี้ส่งแล้ว แนบรูปเพิ่มไม่ได้ — ต้องให้หัวหน้างานตีกลับก่อน', 409);
+  const reason = params.lateAttach?.reason.trim() ?? '';
+  const isLate = !ATTACHABLE_STATUSES.has(workOrder.status);
+
+  if (isLate) {
+    if (!LATE_ATTACHABLE_STATUSES.has(workOrder.status)) {
+      throw new MediaError('สถานะใบงานนี้แนบรูปไม่ได้', 409);
+    }
+    if (!params.lateAttach) {
+      throw new MediaError(
+        'ใบงานนี้ส่งแล้ว — แนบเพิ่มได้เฉพาะผู้มีสิทธิ์ตรวจใบงาน และต้องระบุเหตุผล',
+        409,
+      );
+    }
+    // An unexplained late addition to a signed document is exactly the thing
+    // that makes the document arguable later.
+    if (!reason) throw new MediaError('กรุณาระบุเหตุผลที่แนบรูปเพิ่มภายหลัง', 400);
   }
 
   // The uploader's FILENAME is still discarded — it reaches the local driver's
@@ -204,7 +252,7 @@ export async function attachToWorkOrder(params: {
     await adapter.put(thumbKey, params.thumb, 'image/jpeg');
   }
 
-  const { exifTakenAt, lat, lng } = cleanExif(params.exif);
+  const { exifTakenAt, lat, lng } = cleanExif(params.exif, await getCapturePolicy());
 
   // Written after the object exists: a row pointing at bytes that were never
   // stored would render as a permanently broken thumbnail.
@@ -223,6 +271,8 @@ export async function attachToWorkOrder(params: {
       lng,
       caption: params.caption ?? null,
       uploadedById: params.actorId ?? null,
+      addedAfterSubmit: isLate,
+      addedReason: isLate ? reason : null,
     },
     select: { id: true },
   });
@@ -256,4 +306,47 @@ export async function findAttachmentByKey(key: string) {
       lng: true,
     },
   });
+}
+
+export interface LateAttachmentView {
+  id: string;
+  key: string;
+  url: string;
+  kind: AttachmentKind;
+  reason: string;
+  addedByName: string | null;
+  addedAt: string;
+}
+
+/**
+ * Photographs added to this work order after it was handed in.
+ *
+ * Returned separately from the form payload on purpose. These never entered
+ * the payload a signature was taken over, so presenting them inside the form
+ * would imply the customer saw them. They belong beside the document, labelled
+ * with who added them and why.
+ */
+export async function listLateAttachments(workOrderId: string): Promise<LateAttachmentView[]> {
+  const rows = await prisma.attachment.findMany({
+    where: { entityType: 'WorkOrder', entityId: workOrderId, addedAfterSubmit: true },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      storageKey: true,
+      kind: true,
+      addedReason: true,
+      createdAt: true,
+      uploadedBy: { select: { name: true } },
+    },
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    key: r.storageKey,
+    url: mediaUrl(r.storageKey),
+    kind: r.kind,
+    reason: r.addedReason ?? '',
+    addedByName: r.uploadedBy?.name ?? null,
+    addedAt: r.createdAt.toISOString(),
+  }));
 }
