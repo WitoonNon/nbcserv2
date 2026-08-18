@@ -2,10 +2,16 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
 /**
- * @client-confirm A7 — this is the low-resolution PNG lifted from the public
- * website. Replace with the vector original (.ai / .eps / .svg) before any
- * printed output goes to a customer.
+ * The brand mark, 2000x1185 with transparency — supplied by the client on
+ * 19 ส.ค. 2569, replacing the 439x260 export scraped from their website.
+ *
+ * Width is derived from the height rather than passed separately so the
+ * proportions cannot drift: the previous callers hardcoded pairs like 150x84,
+ * which is 1.79:1 against the artwork's 1.69:1, and quietly stretched the logo
+ * sideways everywhere it appeared.
  */
+/** 2000 / 1185, the artwork's own aspect ratio. */
+export const LOGO_RATIO = 1.6878;
 export function Logo({
   className,
   height = 32,
@@ -20,7 +26,7 @@ export function Logo({
       <Image
         src="/brand/nbc-logo.png"
         alt="NBC Group"
-        width={Math.round(height * 1.78)}
+        width={Math.round(height * LOGO_RATIO)}
         height={height}
         priority
         className="object-contain"

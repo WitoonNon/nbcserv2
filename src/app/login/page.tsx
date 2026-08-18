@@ -21,7 +21,7 @@ export default function LoginPage({
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Brand panel — carries the logo on the gradient it was designed for. */}
       <div className="brand-gradient hidden lg:flex flex-col justify-between p-10 text-white">
-        <Image src="/brand/nbc-logo.png" alt="NBC Group" width={150} height={84} priority
+        <Image src="/brand/nbc-logo.png" alt="NBC Group" width={150} height={89} priority
           className="object-contain drop-shadow-lg" />
         <div>
           <h1 className="text-white text-3xl leading-snug">
@@ -43,7 +43,7 @@ export default function LoginPage({
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-6 flex justify-center">
-            <Image src="/brand/nbc-logo.png" alt="NBC Group" width={110} height={62} priority
+            <Image src="/brand/nbc-logo.png" alt="NBC Group" width={110} height={65} priority
               className="object-contain" />
           </div>
 

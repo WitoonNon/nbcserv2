@@ -18,7 +18,7 @@ export default function ChangePasswordPage() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-[var(--color-surface-alt)]">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex justify-center">
-          <Image src="/brand/nbc-logo.png" alt="NBC Group" width={110} height={62} priority
+          <Image src="/brand/nbc-logo.png" alt="NBC Group" width={110} height={65} priority
             className="object-contain" />
         </div>
 
