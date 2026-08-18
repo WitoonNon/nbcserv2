@@ -7,10 +7,12 @@
 แต่ไม่แตะโค้ดเว็บเดิม — เว็บเดิมยังเป็นหน้าร้านสำหรับการตลาดเหมือนเดิม
 
 > **สถานะ:** Phase 0–1 เสร็จ · **Phase 2 เสร็จ 2.1–2.3 และ 2.5 · ขึ้นเซิร์ฟเวอร์แล้ว**
-> เทสต์ผ่าน **144/144** กับ Postgres จริง · Lighthouse `/login` 100 · `/booking` 91
+> เทสต์ผ่าน **178/178** กับ Postgres จริง · Lighthouse `/login` 100 · `/booking` 91
 >
-> 👉 **มารับงานต่อ อ่าน [`docs/03-PHASE-ROADMAP.md`](docs/03-PHASE-ROADMAP.md) ก่อน** —
-> งานถัดไปคือ **2.4 Export PDF** (รอโลโก้เวกเตอร์จากลูกค้า) และ **2.6 แจ้งเตือน LINE**
+> 👉 **มารับงานต่อ อ่าน [`docs/03-PHASE-ROADMAP.md`](docs/03-PHASE-ROADMAP.md) ก่อน**
+>
+> เหลือในเฟส 2 สองข้อ และรอลูกค้าทั้งคู่ —
+> **2.4 Export PDF** (รอโลโก้เวกเตอร์) · **2.6 แจ้งเตือน LINE** (มีสเปคแล้ว ดู [`docs/06-SPEC-LINE-NOTIFY.md`](docs/06-SPEC-LINE-NOTIFY.md))
 
 ## 🌐 ใช้งานจริง
 
@@ -52,9 +54,12 @@
 | **แนบรูปถ่ายหน้างาน** | ✅ Supabase Storage (bucket private + signed URL) — Phase 2.2 |
 | **ลายเซ็นบนมือถือ + ผูกกับ SHA-256 ของเนื้อหา** | ✅ ตรวจได้ว่าเอกสารถูกแก้หลังเซ็นหรือไม่ — Phase 2.3 |
 | **แอปช่าง: เปลี่ยนสถานะจากหน้างาน + ทำงานออฟไลน์** | ✅ คิวส่งภายหลัง — Phase 2.5 |
+| **คิวใบงานรอตรวจสำหรับหัวหน้างาน** | ✅ `/work-orders` แยกตามสถานะ + เตือนเมื่อฟอร์มถูกแก้หลังเซ็น |
+| **เปิด/ปิดการเก็บเวลาถ่ายรูปและพิกัด GPS** | ✅ `/settings/capture` — พิกัดปิดไว้ตามค่าเริ่มต้น (PDPA) |
+| **แนบรูปย้อนหลังหลังส่งใบงาน** | ✅ ต้องมีสิทธิ์ตรวจใบงาน + ระบุเหตุผล · แสดงแยกจากฟอร์มที่เซ็นไปแล้ว |
 | Export PDF ภาษาไทย | ❌ Phase 2.4 — **รอโลโก้เวกเตอร์จากลูกค้า** |
 | ทะเบียนเครื่องปรับอากาศ / รายงานสถิติ | ❌ Phase 3 |
-| แจ้งเตือน LINE | ❌ Phase 2.6 — รอสิทธิ์ Messaging API |
+| แจ้งเตือน LINE | ❌ Phase 2.6 — รอสิทธิ์ Messaging API · [มีสเปคแล้ว](docs/06-SPEC-LINE-NOTIFY.md) |
 
 ---
 
@@ -66,7 +71,7 @@ cp .env.example .env          # แล้วใส่ DATABASE_URL
 npx prisma generate
 npx prisma migrate deploy
 npm run db:seed
-npm test                      # ต้องได้ 51/51 ก่อนเริ่มแก้อะไร
+npm test                      # ต้องได้ 178/178 ก่อนเริ่มแก้อะไร
 npm run dev
 ```
 
@@ -118,7 +123,7 @@ SUPABASE_STORAGE_BUCKET="work-orders"
 | `npm run db:check` | เช็คว่าต่อ DB ได้ และรองรับ `SELECT FOR UPDATE` |
 | `npm run db:seed` | ใส่ข้อมูลตั้งต้น (รันซ้ำได้ ไม่พัง) |
 | `node scripts/demo-day.mjs` | สร้างงานตัวอย่างของวันนี้ สำหรับเดโม |
-| `npm test` | เทสต์ทั้งหมด 51 ข้อ (ต้องมี DB) |
+| `npm test` | เทสต์ทั้งหมด 178 ข้อ (ต้องมี DB) |
 | `npm run typecheck` | ตรวจ TypeScript ทั้งโปรเจกต์ |
 | `npm run client-confirm` | ดูรายการค่าที่ยังรอลูกค้ายืนยัน |
 
@@ -130,7 +135,9 @@ SUPABASE_STORAGE_BUCKET="work-orders"
 | `tests/booking.quota.test.ts` | 5 | ✅ | จองผ่านเว็บต้องตัดโควตา |
 | `tests/workorder.lifecycle.test.ts` | 13 | ✅ | ใบงานที่อนุมัติแล้วต้องแก้ไม่ได้ |
 | `tests/workorder.signature.test.ts` | 15 | ✅ | ลายเซ็นต้องผูกกับเนื้อหาที่เซ็นจริง |
-| `tests/media.attachment.test.ts` | 13 | ✅ | อัปซ้ำต้องไม่ทับหลักฐาน |
+| `tests/media.attachment.test.ts` | 18 | ✅ | อัปซ้ำต้องไม่ทับหลักฐาน · แนบย้อนหลังต้องมีเหตุผล |
+| `tests/workorder.access.test.ts` | 20 | ✅ | ใบงานต้องเห็นได้เฉพาะคนที่เกี่ยวข้อง |
+| `tests/media.capture-policy.test.ts` | 9 | ✅ | ปิดเก็บพิกัดแล้วต้องไม่เก็บจริง |
 | `tests/jobs.fieldwork.test.ts` | 14 | ✅ | ช่างเปลี่ยนสถานะได้เฉพาะงานทีมตัวเอง |
 | `tests/catalog.pricing.test.ts` | 11 | ✅ | ราคาที่ลูกค้ายืนยันแล้วต้องไม่เพี้ยน |
 | `tests/forms.validator.test.ts` | 17 | ❌ | ฟอร์มที่กรอกถูกต้องต้องส่งผ่าน |
