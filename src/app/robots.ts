@@ -48,6 +48,9 @@ export default function robots(): MetadataRoute.Robots {
           '/reports',
           '/settings',
           '/work-orders',
+          // A printable document names a customer, their address, and shows
+          // photographs taken inside their home.
+          '/print',
           // Technician application.
           '/t',
           // Authentication and machinery.

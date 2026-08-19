@@ -39,9 +39,22 @@ export default async function WorkOrderDocumentPage({
 
   return (
     <div className="space-y-4 max-w-5xl">
-      <Link href={`/jobs/${workOrder.jobId}`} className="text-sm text-[var(--color-brand-blue-600)]">
-        ← กลับไปงาน {workOrder.jobNo}
-      </Link>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Link href={`/jobs/${workOrder.jobId}`} className="text-sm text-[var(--color-brand-blue-600)]">
+          ← กลับไปงาน {workOrder.jobNo}
+        </Link>
+        {/* Opens in its own tab rather than navigating: the reviewer is usually
+            mid-edit, and losing unsaved changes to look at the printout would
+            be a poor trade. */}
+        <a
+          href={`/print/work-order/${workOrder.id}`}
+          target="_blank"
+          rel="noopener"
+          className="border border-[var(--color-line)] rounded-[3px] px-4 py-2 text-sm hover:border-[var(--color-brand-blue)]"
+        >
+          พิมพ์ / บันทึกเป็น PDF
+        </a>
+      </div>
 
       {/* Letterhead, matching the client's paper form. */}
       <div className="card overflow-hidden">

@@ -1,0 +1,542 @@
+/* ---------------------------------------------------------------------------
+   Printed work order — A4.
+
+   Loaded only by /print/work-order/[id], so none of this reaches the rest of
+   the application.
+
+   Written as plain CSS rather than utility classes on purpose. Print layout
+   fails in ways that are invisible on screen — a section split across a page
+   break, a photograph that vanishes because it was a CSS background, a
+   heading that prints white on white. Keeping every rule that governs paper in
+   one file makes those rules reviewable; spread across forty className strings
+   they are not.
+
+   Sizes are in mm and pt. A printed form is a physical object: the signature
+   box has to be big enough to sign in, and 22mm means 22mm on every printer.
+--------------------------------------------------------------------------- */
+
+@page {
+  size: A4;
+  /* The bottom margin is deep enough to hold the running footer, which is
+     pushed down into it. */
+  margin: 10mm 12mm 18mm;
+}
+
+.doc {
+  --doc-navy: #132945;
+  --doc-blue: #2891bd;
+  --doc-orange: #e4750e;
+  --doc-red: #b42318;
+  --doc-line: #b9c2ce;
+  --doc-line-soft: #d8dee6;
+  --doc-muted: #6b7480;
+  --doc-ink: #1a2430;
+
+  /* 210mm less the 12mm side margins. Fixed rather than fluid: the point of
+     this screen is that it shows what the paper will be. */
+  width: 186mm;
+  margin: 0 auto;
+  background: #fff;
+  color: var(--doc-ink);
+  font-family: var(--font-sarabun), 'Leelawadee UI', Tahoma, sans-serif;
+  /* Thai needs the extra leading — at 1.4 the upper tone marks of one line
+     collide with the descenders of the line above. */
+  font-size: 10.5pt;
+  line-height: 1.55;
+}
+
+/* On screen, show it as a sheet of paper. */
+@media screen {
+  .doc {
+    padding: 10mm 12mm 14mm;
+    box-shadow: 0 2px 18px rgba(19, 41, 69, 0.18);
+    margin: 16px auto 48px;
+    min-height: 297mm;
+  }
+  .doc__footer {
+    display: none;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Letterhead
+--------------------------------------------------------------------------- */
+
+.doc__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8mm;
+  border-bottom: 0.8mm solid var(--doc-navy);
+  padding-bottom: 2.5mm;
+}
+
+.doc__logo {
+  height: 16mm;
+  width: auto;
+  display: block;
+}
+
+.doc__company {
+  font-family: var(--font-mitr), 'Leelawadee UI', Tahoma, sans-serif;
+  font-size: 13pt;
+  color: var(--doc-navy);
+  line-height: 1.25;
+  margin: 1.5mm 0 0.8mm;
+}
+
+.doc__addr {
+  font-size: 8pt;
+  color: var(--doc-muted);
+  line-height: 1.45;
+}
+
+.doc__titlebox {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.doc__title {
+  display: inline-block;
+  background: var(--doc-navy);
+  color: #fff;
+  padding: 1.5mm 5mm;
+  font-family: var(--font-mitr), 'Leelawadee UI', Tahoma, sans-serif;
+  font-size: 11pt;
+  letter-spacing: 0.4px;
+  /* Chrome drops background colours unless the operator ticks "Background
+     graphics". This overrides that for the elements that carry meaning —
+     without it the document title prints as white text on white paper. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.doc__meta {
+  margin-top: 2mm;
+  font-size: 9pt;
+}
+
+.doc__meta > div {
+  display: flex;
+  gap: 3mm;
+  justify-content: flex-end;
+}
+
+.doc__meta dt {
+  color: var(--doc-muted);
+}
+
+.doc__meta dd {
+  font-variant-numeric: tabular-nums;
+  color: var(--doc-navy);
+  font-weight: 600;
+}
+
+.doc__contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1mm 5mm;
+  font-size: 7.5pt;
+  color: var(--doc-muted);
+  padding: 1.2mm 0 2.5mm;
+  border-bottom: 0.2mm solid var(--doc-line-soft);
+}
+
+/* A document that has not been through review must say so on the paper.
+   Handing a customer an unreviewed draft that looks exactly like an approved
+   one is the failure this prevents; on screen there is a status chip, and once
+   printed there would be nothing at all. */
+.doc__draft {
+  border: 0.4mm solid var(--doc-red);
+  color: var(--doc-red);
+  text-align: center;
+  font-family: var(--font-mitr), 'Leelawadee UI', Tahoma, sans-serif;
+  font-size: 10pt;
+  padding: 1.2mm 2mm;
+  margin-top: 2.5mm;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* Who and where, above the form body. */
+.doc__party {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1mm 6mm;
+  padding: 2.5mm 0 1mm;
+  font-size: 9.5pt;
+}
+
+.doc__party b {
+  color: var(--doc-muted);
+  font-weight: 400;
+  margin-right: 2mm;
+}
+
+/* ---------------------------------------------------------------------------
+   Sections
+--------------------------------------------------------------------------- */
+
+.sec {
+  border: 0.25mm solid var(--doc-line);
+  margin-top: 3mm;
+  /* A section that straddles a page break loses its heading, and the heading
+     is what says which readings belong to which unit. */
+  break-inside: avoid;
+}
+
+.sec__head {
+  background: var(--doc-navy);
+  color: #fff;
+  padding: 1.2mm 3mm;
+  font-family: var(--font-mitr), 'Leelawadee UI', Tahoma, sans-serif;
+  font-size: 10pt;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.sec__head span {
+  font-size: 8pt;
+  opacity: 0.7;
+  margin-left: 2mm;
+}
+
+.sec__body {
+  padding: 2.5mm 3mm;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5mm 6mm;
+}
+
+.sec__body > .wide,
+.sec__body > .sec,
+.sec__body > .tbl-wrap,
+.sec__body > .photos,
+.sec__body > .sign {
+  grid-column: 1 / -1;
+}
+
+/* ---------------------------------------------------------------------------
+   Fields
+--------------------------------------------------------------------------- */
+
+.fld {
+  break-inside: avoid;
+}
+
+.fld__label {
+  display: block;
+  font-size: 8.5pt;
+  color: var(--doc-muted);
+  line-height: 1.3;
+}
+
+.fld__label i {
+  font-style: normal;
+  font-size: 7.5pt;
+  opacity: 0.75;
+}
+
+/* The value sits on a rule, so a field left blank is still a line somebody can
+   write on. A printed form has to stay usable when the tablet is flat. */
+.fld__value {
+  display: block;
+  min-height: 5.5mm;
+  border-bottom: 0.2mm dotted var(--doc-line);
+  padding: 0.4mm 0 0.6mm;
+  font-size: 10pt;
+  white-space: pre-wrap;
+}
+
+.fld__value--multiline {
+  min-height: 12mm;
+}
+
+.fld__unit {
+  color: var(--doc-muted);
+  font-size: 8.5pt;
+  margin-left: 1.5mm;
+}
+
+/* --- Choice boxes -------------------------------------------------------
+   Drawn from borders rather than the checkbox glyphs. Sarabun has no
+   box-drawing characters, so those fall back to whatever face the printer
+   substitutes: the boxes come out at inconsistent sizes, or as tofu. */
+.opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1mm 5mm;
+  padding-top: 0.8mm;
+}
+
+.opts--grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1mm 4mm;
+}
+
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  font-size: 9.5pt;
+  break-inside: avoid;
+}
+
+.box {
+  width: 3.2mm;
+  height: 3.2mm;
+  border: 0.25mm solid var(--doc-ink);
+  flex-shrink: 0;
+  display: inline-block;
+  position: relative;
+}
+
+.box--on::after {
+  content: '';
+  position: absolute;
+  inset: 0.6mm;
+  background: var(--doc-ink);
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* ---------------------------------------------------------------------------
+   Tables — parts list and measurements
+--------------------------------------------------------------------------- */
+
+.tbl-wrap {
+  margin-top: 3mm;
+  break-inside: avoid;
+}
+
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+}
+
+.tbl caption {
+  text-align: left;
+  font-family: var(--font-mitr), 'Leelawadee UI', Tahoma, sans-serif;
+  font-size: 10pt;
+  color: var(--doc-navy);
+  padding-bottom: 1mm;
+}
+
+.tbl th {
+  background: var(--doc-blue);
+  color: #fff;
+  font-weight: 400;
+  font-size: 9pt;
+  padding: 1.2mm 2mm;
+  border: 0.2mm solid var(--doc-line);
+  text-align: left;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.tbl td {
+  border: 0.2mm solid var(--doc-line);
+  padding: 1.2mm 2mm;
+  /* Blank pre-drawn rows keep their height, or the table collapses into a
+     header with nothing to write under. */
+  height: 6mm;
+  vertical-align: top;
+}
+
+.tbl td.num {
+  text-align: center;
+  color: var(--doc-muted);
+  width: 10mm;
+}
+
+/* ---------------------------------------------------------------------------
+   Photographs
+--------------------------------------------------------------------------- */
+
+.photos {
+  margin-top: 3mm;
+}
+
+.photos__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2mm;
+  margin-top: 1.5mm;
+}
+
+.photo {
+  break-inside: avoid;
+}
+
+.photo img {
+  width: 100%;
+  height: 32mm;
+  object-fit: cover;
+  border: 0.2mm solid var(--doc-line);
+  display: block;
+}
+
+.photo figcaption {
+  font-size: 7pt;
+  color: var(--doc-muted);
+  margin-top: 0.5mm;
+  line-height: 1.3;
+}
+
+/* ---------------------------------------------------------------------------
+   Signatures
+--------------------------------------------------------------------------- */
+
+.sign {
+  margin-top: 3mm;
+  break-inside: avoid;
+}
+
+.sign__pad {
+  height: 22mm;
+  border-bottom: 0.25mm solid var(--doc-ink);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 0.5mm;
+}
+
+.sign__pad img {
+  max-height: 21mm;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.sign__name {
+  text-align: center;
+  font-size: 9.5pt;
+  margin-top: 1mm;
+  line-height: 1.4;
+}
+
+.sign__name small {
+  display: block;
+  font-size: 8pt;
+  color: var(--doc-muted);
+}
+
+/* A signature that no longer covers what the document says has to say so on
+   the paper. On screen it is a badge somebody can weigh; printed and handed to
+   a customer it would otherwise be indistinguishable from a valid one. */
+.sign__stale {
+  display: block;
+  text-align: center;
+  font-size: 8pt;
+  color: var(--doc-red);
+  border: 0.25mm solid var(--doc-red);
+  padding: 0.6mm 1mm;
+  margin-top: 1mm;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* ---------------------------------------------------------------------------
+   Late attachments — deliberately outside the form body.
+--------------------------------------------------------------------------- */
+
+.late {
+  margin-top: 4mm;
+  border: 0.25mm dashed var(--doc-orange);
+  padding: 2.5mm 3mm;
+  break-inside: avoid;
+}
+
+.late__head {
+  font-family: var(--font-mitr), 'Leelawadee UI', Tahoma, sans-serif;
+  font-size: 9.5pt;
+  color: var(--doc-orange);
+}
+
+.late__note {
+  font-size: 8pt;
+  color: var(--doc-muted);
+  margin-bottom: 1.5mm;
+}
+
+/* ---------------------------------------------------------------------------
+   Closing + running footer
+--------------------------------------------------------------------------- */
+
+.doc__thanks {
+  text-align: center;
+  color: var(--doc-navy);
+  font-size: 10pt;
+  margin-top: 5mm;
+}
+
+/* Chrome repeats a fixed element on every printed page. It is pushed down into
+   the page's bottom margin so it never lands on the last line of content.
+
+   It exists because a multi-page work order gets separated — stapled wrong,
+   scanned a sheet at a time, faxed. A loose page 3 with no document number on
+   it cannot be filed back against anything. */
+.doc__footer {
+  position: fixed;
+  bottom: -13mm;
+  left: 0;
+  right: 0;
+  height: 10mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 7.5pt;
+  color: var(--doc-muted);
+  border-top: 0.2mm solid var(--doc-line-soft);
+  padding-top: 1mm;
+}
+
+/* ---------------------------------------------------------------------------
+   Screen-only toolbar
+--------------------------------------------------------------------------- */
+
+.printbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-brand-navy, #132945);
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.printbar__hint {
+  font-size: 12px;
+  opacity: 0.75;
+  max-width: 62ch;
+}
+
+.printbar__btn {
+  background: var(--color-brand-orange, #e4750e);
+  color: #fff;
+  border: 0;
+  border-radius: 3px;
+  padding: 10px 20px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.printbar__btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

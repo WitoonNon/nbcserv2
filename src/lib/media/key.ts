@@ -48,6 +48,22 @@ export function mediaKey(parts: {
   ].join('/');
 }
 
+/**
+ * The app-relative URL a stored key is served from.
+ *
+ * Lives here rather than beside the storage adapter because it is pure string
+ * layout with no node dependency, and the printable work order — a server
+ * component that has to stay renderable in a plain DOM for testing — needs it.
+ * Reaching it through the attachment service would drag prisma and the storage
+ * driver along behind `server-only` for the sake of one template literal.
+ *
+ * Always app-relative: the route behind it re-checks who is asking, so a
+ * signed URL is never minted before that check has run.
+ */
+export function mediaUrl(key: string): string {
+  return `/api/media/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 /** The key a work-order photograph will have, worked out before it uploads. */
 export function workOrderMediaKey(params: {
   workOrderId: string;

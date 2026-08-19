@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db';
 import type { AttachmentKind } from '@/generated/prisma';
 import { mediaKey, storage } from '@/lib/storage';
+import { mediaUrl } from '@/lib/media/key';
 import {
   CAPTURE_DEFAULTS,
   getCapturePolicy,
@@ -286,10 +287,8 @@ export async function attachToWorkOrder(params: {
   };
 }
 
-/** The app-relative URL for a stored key — always goes through the auth check. */
-export function mediaUrl(key: string): string {
-  return `/api/media/${key.split('/').map(encodeURIComponent).join('/')}`;
-}
+/** Re-exported so existing callers keep one import site. @see @/lib/media/key */
+export { mediaUrl };
 
 export async function findAttachmentByKey(key: string) {
   return prisma.attachment.findFirst({
