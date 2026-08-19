@@ -122,12 +122,56 @@ function photoPng(hue: number): Buffer {
 // --------------------------------------------------------------------------
 
 const STORAGE_ROOT = path.resolve(process.env.STORAGE_LOCAL_DIR ?? './.storage');
+const DRIVER = process.env.STORAGE_DRIVER ?? 'local';
 
-function store(key: string, bytes: Buffer) {
-  const target = path.join(STORAGE_ROOT, key);
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(target, bytes);
-  return { key, sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.byteLength };
+/**
+ * Put the bytes wherever this environment keeps them.
+ *
+ * Follows STORAGE_DRIVER rather than always writing to disk. The rows land in
+ * whatever database DATABASE_URL points at, so a demo seeded against the
+ * deployed database while writing its images to a laptop produces a work order
+ * that renders everywhere except where anyone would look at it — every
+ * photograph and both signatures 404, and the document appears to show a
+ * technician who took no pictures.
+ *
+ * The upload is a plain fetch rather than the application's storage adapter:
+ * that module is marked `server-only`, which throws the moment a plain Node
+ * script imports it.
+ */
+async function store(key: string, bytes: Buffer) {
+  const result = {
+    key,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    bytes: bytes.byteLength,
+  };
+
+  if (DRIVER !== 'supabase') {
+    const target = path.join(STORAGE_ROOT, key);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, bytes);
+    return result;
+  }
+
+  const base = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'work-orders';
+  if (!base || !serviceKey) throw new Error('STORAGE_DRIVER=supabase แต่ไม่มี SUPABASE_URL / SERVICE_ROLE_KEY');
+
+  const encoded = key.split('/').map(encodeURIComponent).join('/');
+  const res = await fetch(`${base}/storage/v1/object/${bucket}/${encoded}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+      'Content-Type': 'image/png',
+      'x-upsert': 'true',
+    },
+    body: new Uint8Array(bytes),
+  });
+  if (!res.ok) {
+    throw new Error(`อัปโหลดไม่สำเร็จ (${res.status}): ${(await res.text()).slice(0, 200)}`);
+  }
+  return result;
 }
 
 async function main() {
@@ -155,15 +199,15 @@ async function main() {
 
   for (const [i, kind] of (['BEFORE', 'BEFORE', 'AFTER', 'AFTER'] as const).entries()) {
     const key = `202608/WorkOrder/${workOrderId}/${kind}/photo-${i + 1}.png`;
-    const put = store(key, photoPng(i % 3));
+    const put = await store(key, photoPng(i % 3));
     attachments.push({ key, sha: put.sha256, bytes: put.bytes, kind });
     photoKeys.push(key);
   }
 
   const custSigKey = `202608/WorkOrder/${workOrderId}/SIGNATURE/customer.png`;
   const techSigKey = `202608/WorkOrder/${workOrderId}/SIGNATURE/technician.png`;
-  const custSig = store(custSigKey, signaturePng(0.4));
-  const techSig = store(techSigKey, signaturePng(2.1));
+  const custSig = await store(custSigKey, signaturePng(0.4));
+  const techSig = await store(techSigKey, signaturePng(2.1));
 
   // A signature image needs an Attachment row of its own, not just bytes in
   // the bucket. /api/media refuses to serve any key it has no record of — the
@@ -279,7 +323,7 @@ async function main() {
 
   // A photograph the office added after the fact — printed outside the form.
   const lateKey = `202608/WorkOrder/${workOrderId}/OTHER/late.png`;
-  const late = store(lateKey, photoPng(2));
+  const late = await store(lateKey, photoPng(2));
   await prisma.attachment.create({
     data: {
       entityType: 'WorkOrder',
@@ -295,7 +339,7 @@ async function main() {
     },
   });
 
-  console.log(`สร้างแล้ว  ${docNo}  (${job.jobNo})`);
+  console.log(`สร้างแล้ว  ${docNo}  (${job.jobNo})  · storage=${DRIVER}`);
   console.log(`บนจอ      /work-orders/d/${workOrderId}`);
   console.log(`พิมพ์      /print/work-order/${workOrderId}`);
 }
