@@ -22,6 +22,7 @@ process.loadEnvFile(path.join(process.cwd(), '.env'));
 process.env.NOTIFY_DRIVER = 'line';
 
 import { lineAccessToken, botInfo, messageQuota } from '../src/lib/notify/line.js';
+import { callbackUrl } from '../src/lib/notify/line-link.js';
 import { notifier } from '../src/lib/notify/index.js';
 
 const line = (label: string, value: unknown) =>
@@ -55,6 +56,15 @@ async function main() {
 
   const after = await messageQuota();
   line('quota after', `${JSON.stringify(after)} · consumed: ${after.used - before.used}`);
+
+  // Printed so it can be compared by eye against the LINE console before a
+  // deploy. LINE matches this string exactly — a different host, a stray
+  // trailing slash, or an APP_URL nobody updated after moving domain all fail
+  // the same way: the customer taps the button and lands on an error page,
+  // and nothing in our own logs says why.
+  console.log('');
+  line('callback url', callbackUrl());
+  line('', 'ต้องตรงกับที่ลงทะเบียนไว้ใน LINE console เป๊ะทุกตัวอักษร');
 }
 
 main().catch((e) => {

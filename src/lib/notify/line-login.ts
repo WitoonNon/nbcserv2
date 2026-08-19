@@ -1,6 +1,7 @@
 import 'server-only';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { env } from '@/lib/env';
+import { callbackUrl } from './line-link';
 
 /**
  * LINE Login — how a customer's LINE identity gets attached to their booking.
@@ -40,10 +41,9 @@ function credentials() {
   return { id: e.LINE_LOGIN_CHANNEL_ID, secret: e.LINE_LOGIN_CHANNEL_SECRET };
 }
 
-/** Where LINE sends the customer back. Registered in the console, so it has to match exactly. */
-export function callbackUrl(): string {
-  return `${env().APP_URL.replace(/\/+$/, '')}/api/line/callback`;
-}
+// Defined in line-link.ts, which carries no secret and so can be imported by
+// the pre-deploy check. Re-exported here so callers have one import site.
+export { callbackUrl };
 
 // ---------------------------------------------------------------------------
 // state

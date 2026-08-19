@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { env } from '@/lib/env';
 import { authorizeUrl, signState, LineLoginError } from '@/lib/notify/line-login';
-import { LINK_JOB_COOKIE } from '@/lib/notify/link-cookie';
+import { LINK_JOB_COOKIE } from '@/lib/notify/line-link';
 
 export const dynamic = 'force-dynamic';
 

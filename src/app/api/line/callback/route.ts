@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { env } from '@/lib/env';
 import { exchangeCode, verifyState, LineLoginError } from '@/lib/notify/line-login';
 import { linkLineToJobContact, IdentityError } from '@/modules/customers/identity.service';
-import { LINK_JOB_COOKIE } from '@/lib/notify/link-cookie';
+import { LINK_JOB_COOKIE } from '@/lib/notify/line-link';
 
 export const dynamic = 'force-dynamic';
 

@@ -17,7 +17,7 @@ import {
   QuotaUnavailableError,
 } from '@/modules/scheduling/quota.service';
 import { createJobFromBooking } from '@/modules/jobs/job.service';
-import { LINK_JOB_COOKIE, LINK_JOB_COOKIE_MAX_AGE } from '@/lib/notify/link-cookie';
+import { LINK_JOB_COOKIE, LINK_JOB_COOKIE_MAX_AGE } from '@/lib/notify/line-link';
 
 const HOLD_COOKIE = 'nbc_booking_session';
 
