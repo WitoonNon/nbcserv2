@@ -53,9 +53,6 @@
     margin: 16px auto 48px;
     min-height: 297mm;
   }
-  .doc__footer {
-    display: none;
-  }
 }
 
 @media print {
@@ -487,18 +484,33 @@
    scanned a sheet at a time, faxed. A loose page 3 with no document number on
    it cannot be filed back against anything. */
 .doc__footer {
+  /* Hidden by default and revealed for print, rather than the other way
+     round. It was written as `display: flex` here with a `display: none` in an
+     earlier `@media screen` block — same specificity, and the later rule wins,
+     so the running footer sat across the middle of the screen. Declaring the
+     paper-only state in the print block is the version that cannot lose. */
+  display: none;
   position: fixed;
   bottom: -13mm;
   left: 0;
   right: 0;
   height: 10mm;
-  display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 7.5pt;
   color: var(--doc-muted);
   border-top: 0.2mm solid var(--doc-line-soft);
   padding-top: 1mm;
+}
+
+/* Must come AFTER .doc__footer, not in the @media print block at the top of
+   this file. A media query adds no specificity, so the winner between two
+   `display` declarations on the same selector is simply whichever is written
+   last. */
+@media print {
+  .doc__footer {
+    display: flex;
+  }
 }
 
 /* ---------------------------------------------------------------------------
