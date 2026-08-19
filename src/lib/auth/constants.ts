@@ -28,6 +28,9 @@ export const PUBLIC_PREFIXES = [
   '/api/media',
   '/api/cron',
   '/api/field',
+  // Customers linking their LINE account are not signed in — that is the
+  // whole point of the flow.
+  '/api/line',
 ] as const;
 
 /** Endpoints replayed from the offline queue, which must be able to answer 401. */

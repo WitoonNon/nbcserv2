@@ -17,6 +17,7 @@ import {
   QuotaUnavailableError,
 } from '@/modules/scheduling/quota.service';
 import { createJobFromBooking } from '@/modules/jobs/job.service';
+import { LINK_JOB_COOKIE, LINK_JOB_COOKIE_MAX_AGE } from '@/lib/notify/link-cookie';
 
 const HOLD_COOKIE = 'nbc_booking_session';
 
@@ -126,6 +127,8 @@ export interface ConfirmState {
   error?: string;
   jobNo?: string;
   scheduledDate?: string;
+  /** True once the browser holds the cookie that lets it link a LINE account. */
+  canLinkLine?: boolean;
 }
 
 export async function confirmBookingAction(
@@ -178,7 +181,25 @@ export async function confirmBookingAction(
 
     revalidatePath('/booking');
     revalidatePath('/schedule');
-    return { jobNo: result.jobNo, scheduledDate: date };
+
+    // Which job this browser may attach a LINE account to. httpOnly, so the
+    // id never reaches script, and short-lived — the offer belongs to the
+    // person still looking at their confirmation, not to whoever uses the
+    // phone next.
+    //
+    // The job id lives here rather than in the link URL on purpose: a job id
+    // in a query string would let anyone who learned one subscribe to a
+    // stranger's notifications, which announce when a technician is on the
+    // way to their home.
+    (await cookies()).set(LINK_JOB_COOKIE, result.jobId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: LINK_JOB_COOKIE_MAX_AGE,
+      path: '/',
+    });
+
+    return { jobNo: result.jobNo, scheduledDate: date, canLinkLine: true };
   } catch (e) {
     return { error: friendlyMessage(e) };
   }

@@ -39,6 +39,15 @@ const schema = z.object({
   LINE_CHANNEL_SECRET: z.string().optional(),
   /** Only for a deployment that still supplies a long-lived token by hand. */
   LINE_CHANNEL_ACCESS_TOKEN: z.string().optional(),
+  /**
+   * A SEPARATE channel from the Messaging API one, and it must sit under the
+   * same LINE provider. A userId is scoped to the provider, so a login channel
+   * created under a different one returns ids that the messaging channel
+   * cannot push to — everything appears to work right up until no message is
+   * ever delivered.
+   */
+  LINE_LOGIN_CHANNEL_ID: z.string().optional(),
+  LINE_LOGIN_CHANNEL_SECRET: z.string().optional(),
 
   AUTH_SECRET: z.string().default('dev-secret-change-me'),
 })
