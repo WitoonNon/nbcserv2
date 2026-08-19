@@ -29,6 +29,15 @@ const schema = z.object({
   SUPABASE_SIGNED_URL_TTL: z.coerce.number().int().positive().default(3600),
 
   NOTIFY_DRIVER: z.enum(['console', 'line', 'email']).default('console'),
+  /**
+   * The channel's own identity. Access tokens are minted from these at
+   * runtime rather than pasted in: a long-lived token can be revoked from the
+   * LINE console by anyone with access and nothing tells the application, and
+   * that is exactly how the first one we were issued turned up dead.
+   */
+  LINE_CHANNEL_ID: z.string().optional(),
+  LINE_CHANNEL_SECRET: z.string().optional(),
+  /** Only for a deployment that still supplies a long-lived token by hand. */
   LINE_CHANNEL_ACCESS_TOKEN: z.string().optional(),
 
   AUTH_SECRET: z.string().default('dev-secret-change-me'),
@@ -36,6 +45,17 @@ const schema = z.object({
   // Fail at boot, not at the moment a technician tries to attach a photo from
   // a rooftop. A missing key is a deployment mistake and should read like one.
   .superRefine((e, ctx) => {
+    if (e.NOTIFY_DRIVER === 'line') {
+      for (const key of ['LINE_CHANNEL_ID', 'LINE_CHANNEL_SECRET'] as const) {
+        if (!e[key]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `NOTIFY_DRIVER=line ต้องมี ${key}`,
+          });
+        }
+      }
+    }
     if (e.STORAGE_DRIVER !== 'supabase') return;
     for (const key of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const) {
       if (!e[key]) {
