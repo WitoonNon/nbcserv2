@@ -25,7 +25,7 @@ import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/index.js';
-import { payloadHash } from '../src/lib/forms/payload-hash.ts';
+import { payloadHash } from '../src/lib/forms/payload-hash.js';
 
 try {
   process.loadEnvFile(path.join(process.cwd(), '.env'));
