@@ -57,6 +57,12 @@ export default async function SettingsPage() {
       meta: counts ? `${counts.forms} ฟอร์ม` : null,
     },
     {
+      href: '/settings/notifications',
+      title: 'การแจ้งเตือนลูกค้า',
+      desc: 'ดูว่าข้อความไหนส่งถึงลูกค้าแล้ว ข้อความไหนส่งไม่ได้ และโควตาคงเหลือของเดือนนี้',
+      meta: 'LINE',
+    },
+    {
       href: '/settings/capture',
       title: 'ข้อมูลที่เก็บจากรูปถ่ายหน้างาน',
       desc: 'เลือกเปิด-ปิดการบันทึกเวลาถ่ายรูป และพิกัด GPS ของรูปที่ช่างถ่าย',
