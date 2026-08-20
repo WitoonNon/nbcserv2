@@ -38,7 +38,51 @@ const inputCls =
 interface Search {
   jobNo?: string;
   phone?: string;
+  /** Where the LINE link attempt ended up. Set by /api/line/callback. */
+  line?: string;
 }
+
+/**
+ * What to say after a LINE link attempt.
+ *
+ * `declined` is deliberately not phrased as a failure. A customer who pressed
+ * cancel on LINE's consent screen made a choice, and their booking is
+ * unaffected — telling them something went wrong would be both untrue and a
+ * reason to worry about a job that is perfectly fine.
+ */
+const LINE_RESULT: Record<string, { tone: 'ok' | 'warn'; title: string; detail: string }> = {
+  ok: {
+    tone: 'ok',
+    title: 'เชื่อมต่อ LINE เรียบร้อยแล้ว',
+    detail: 'เราจะแจ้งเตือน 2 ครั้ง — ตอนยืนยันการจอง และตอนช่างถึงหน้างานครับ',
+  },
+  already: {
+    tone: 'ok',
+    title: 'บัญชี LINE นี้เชื่อมต่อไว้อยู่แล้ว',
+    detail: 'ไม่ต้องทำอะไรเพิ่มครับ งานนี้จะแจ้งเตือนไปที่บัญชีเดิม',
+  },
+  declined: {
+    tone: 'warn',
+    title: 'ยังไม่ได้เชื่อมต่อ LINE',
+    detail:
+      'การจองของคุณเรียบร้อยดีทุกอย่างครับ ถ้าอยากรับแจ้งเตือน กดเชื่อมต่อใหม่ได้จากหน้ายืนยันการจอง',
+  },
+  failed: {
+    tone: 'warn',
+    title: 'เชื่อมต่อ LINE ไม่สำเร็จ',
+    detail: 'การจองไม่ได้รับผลกระทบครับ ลองใหม่อีกครั้ง หรือโทร 02-000-7332 ต่อ 1-3',
+  },
+  expired: {
+    tone: 'warn',
+    title: 'ลิงก์เชื่อมต่อหมดอายุแล้ว',
+    detail: 'กรุณาจองใหม่หรือติดต่อเจ้าหน้าที่ เพื่อขอลิงก์เชื่อมต่ออีกครั้งครับ',
+  },
+  unavailable: {
+    tone: 'warn',
+    title: 'ระบบแจ้งเตือน LINE ยังไม่พร้อมใช้งาน',
+    detail: 'การจองของคุณเรียบร้อยดีครับ เจ้าหน้าที่จะติดต่อกลับทางโทรศัพท์ตามปกติ',
+  },
+};
 
 /**
  * Public job tracking.
@@ -54,6 +98,7 @@ export default async function TrackPage({ searchParams }: { searchParams: Promis
   const jobNo = (sp.jobNo ?? '').trim();
   const phone = (sp.phone ?? '').trim();
   const searched = Boolean(jobNo && phone);
+  const lineResult = sp.line ? LINE_RESULT[sp.line] : undefined;
 
   let job = null;
   let dbDown = false;
@@ -87,6 +132,23 @@ export default async function TrackPage({ searchParams }: { searchParams: Promis
           ค้นหา
         </button>
       </form>
+
+      {lineResult && (
+        <div
+          className={
+            'card p-4 text-sm ' +
+            (lineResult.tone === 'ok'
+              ? 'bg-[#06C755]/8 border-[#06C755]/40'
+              : 'bg-[var(--color-brand-orange-50)] border-[var(--color-brand-orange)]/40')
+          }
+        >
+          <p className="font-semibold">
+            {lineResult.tone === 'ok' ? '✓ ' : ''}
+            {lineResult.title}
+          </p>
+          <p className="text-[var(--color-muted)] mt-1 text-[13px]">{lineResult.detail}</p>
+        </div>
+      )}
 
       {dbDown && (
         <div className="card p-4 bg-[var(--color-brand-orange-50)] border-[var(--color-brand-orange)]/40 text-sm">

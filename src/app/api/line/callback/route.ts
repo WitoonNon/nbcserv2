@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { exchangeCode, verifyState, LineLoginError } from '@/lib/notify/line-login';
 import { linkLineToJobContact, IdentityError } from '@/modules/customers/identity.service';
 import { LINK_JOB_COOKIE } from '@/lib/notify/line-link';
+import { notifyJobSafely } from '@/modules/notifications/notify.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,16 @@ export async function GET(req: Request) {
     // `friended` is false when the customer already followed the account —
     // the add-friend prompt only reports a *change*. It is not a failure, and
     // the distinction matters only for what the confirmation screen says.
+    // The first message doubles as proof the link works: the customer sees it
+    // arrive in LINE seconds after tapping, which no confirmation screen of
+    // ours can demonstrate.
+    //
+    // This is where booking confirmation actually gets sent, because at
+    // booking time there was no LINE account to send it to yet — the customer
+    // links immediately afterwards. `once` keeps a returning customer, who was
+    // already messaged at booking, from being told twice.
+    await notifyJobSafely({ jobId, templateCode: 'JOB_CONFIRMED', once: true });
+
     const status = result.alreadyLinked ? 'already' : 'ok';
     return back(`/track?line=${status}`);
   } catch (e) {

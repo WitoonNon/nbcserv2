@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { notifyJobSafely } from '@/modules/notifications/notify.service';
 import type { JobStatus } from '@/generated/prisma';
 import { transitionJob, InvalidTransitionError } from './status-machine';
 
@@ -60,6 +61,26 @@ async function assignedToTechnician(jobId: string, technicianId: string): Promis
   return match !== null;
 }
 
+/**
+ * Whether this event is recent enough to be worth telling the customer about.
+ *
+ * The technician's app queues taps made with no signal and replays them when
+ * it returns, so `occurredAt` can be hours older than the request carrying it.
+ * "ช่างถึงหน้างานแล้ว" arriving three hours after the technician actually
+ * arrived — possibly after they have left — is worse than no message: it sends
+ * somebody home to meet an engineer who has gone.
+ *
+ * The status change itself is still recorded with its true time. Only the
+ * announcement is suppressed, because a notification is about *now* in a way
+ * that a record is not.
+ */
+const NOTIFY_FRESHNESS_MS = 30 * 60 * 1000;
+
+function isFresh(occurredAt: Date | undefined, now = Date.now()): boolean {
+  if (!occurredAt) return true;
+  return now - occurredAt.getTime() <= NOTIFY_FRESHNESS_MS;
+}
+
 export async function advanceFieldJob(params: {
   jobId: string;
   technicianId: string | null;
@@ -82,7 +103,7 @@ export async function advanceFieldJob(params: {
   }
 
   try {
-    return await transitionJob({
+    const moved = await transitionJob({
       jobId: params.jobId,
       to: params.to,
       actorId: params.actorId ?? null,
@@ -91,6 +112,15 @@ export async function advanceFieldJob(params: {
       lng: params.lng ?? null,
       occurredAt: params.occurredAt,
     });
+
+    if (params.to === 'ON_SITE' && isFresh(params.occurredAt)) {
+      // After the transaction, never inside it. A third party's rate limit
+      // must not hold a database lock, and a customer being unreachable must
+      // not roll back the fact that the technician arrived.
+      await notifyJobSafely({ jobId: params.jobId, templateCode: 'TECH_ON_SITE' });
+    }
+
+    return moved;
   } catch (e) {
     if (e instanceof InvalidTransitionError) {
       // Two taps on a slow connection, or the office moved the job first.

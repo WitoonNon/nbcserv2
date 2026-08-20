@@ -18,6 +18,7 @@ import {
 } from '@/modules/scheduling/quota.service';
 import { createJobFromBooking } from '@/modules/jobs/job.service';
 import { LINK_JOB_COOKIE, LINK_JOB_COOKIE_MAX_AGE } from '@/lib/notify/line-link';
+import { notifyJobSafely } from '@/modules/notifications/notify.service';
 
 const HOLD_COOKIE = 'nbc_booking_session';
 
@@ -198,6 +199,11 @@ export async function confirmBookingAction(
       maxAge: LINK_JOB_COOKIE_MAX_AGE,
       path: '/',
     });
+
+    // Reaches a returning customer who linked LINE on an earlier booking. A
+    // first-time customer has no account to reach yet, so this quietly does
+    // nothing and the callback sends it after they link.
+    await notifyJobSafely({ jobId: result.jobId, templateCode: 'JOB_CONFIRMED', once: true });
 
     return { jobNo: result.jobNo, scheduledDate: date, canLinkLine: true };
   } catch (e) {

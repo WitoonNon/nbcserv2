@@ -238,10 +238,33 @@ export function BookingWizard({
           นัดหมาย{state.scheduledDate ? formatThaiFull(state.scheduledDate) : ''} ·
           เจ้าหน้าที่จะติดต่อกลับเพื่อยืนยันช่วงเวลาอีกครั้ง
         </p>
-        <div className="pt-2">
+        {/* The one moment a customer will ever do this. They are looking at a
+            confirmation they wanted, on the phone they booked with — asking
+            later, by any other route, converts far worse.
+
+            No job number in this link: the server reads which booking it is
+            from an httpOnly cookie set when the booking committed. A job id in
+            a URL would let anyone who learned one subscribe to a stranger's
+            notifications, and those say when a technician is on the way to
+            that person's home. */}
+        {state.canLinkLine && (
+          <div className="pt-2">
+            <a
+              href="/api/line/link"
+              className="inline-flex items-center gap-2 bg-[#06C755] text-white rounded-[3px] px-5 py-2.5 text-sm font-semibold"
+            >
+              รับแจ้งเตือนผ่าน LINE
+            </a>
+            <p className="text-[11px] text-[var(--color-muted)] mt-1.5">
+              แจ้งเตือน 2 ครั้ง — ยืนยันการจอง และตอนช่างถึงหน้างาน
+            </p>
+          </div>
+        )}
+
+        <div className="pt-1">
           <a
             href={`/track?jobNo=${encodeURIComponent(state.jobNo)}`}
-            className="inline-block bg-[var(--color-brand-blue-600)] text-white rounded-[3px] px-5 py-2 text-sm font-semibold"
+            className="inline-block border border-[var(--color-line)] rounded-[3px] px-5 py-2 text-sm"
           >
             ติดตามสถานะงาน
           </a>
