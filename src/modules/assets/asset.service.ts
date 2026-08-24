@@ -19,6 +19,19 @@ import type { AcType, Prisma } from '@/generated/prisma';
 
 const RECENT_MONTHS = 12;
 
+/**
+ * Coerce a page number into something a query can actually be run with.
+ *
+ * Not merely defensive. `Math.max(NaN, 1)` is NaN, which reaches Prisma as
+ * `skip: NaN` and throws — so a page number that came from a URL, an API
+ * caller or a typo would take the whole screen down rather than showing page
+ * one. The callers clamp too; this is the boundary that must hold regardless.
+ */
+function clampPage(raw: number | undefined, pages: number): number {
+  if (!Number.isFinite(raw)) return 1;
+  return Math.min(Math.max(Math.floor(raw as number), 1), Math.max(1, pages));
+}
+
 function since(months: number): Date {
   const d = new Date();
   d.setMonth(d.getMonth() - months);
@@ -51,9 +64,33 @@ export interface AssetFilter {
   /** Only units whose next PM date has passed. */
   pmDue?: boolean;
   includeInactive?: boolean;
+  /** 1-based. Out-of-range values are clamped, never rejected. */
+  page?: number;
+  perPage?: number;
 }
 
-export async function listAssets(filter: AssetFilter = {}): Promise<AssetRow[]> {
+export interface Page<T> {
+  rows: T[];
+  total: number;
+  page: number;
+  perPage: number;
+}
+
+export const ASSETS_PER_PAGE = 25;
+
+/**
+ * One page of the register.
+ *
+ * Paged rather than capped. The previous `take: 300` looked like a limit but
+ * behaved like a lie — a company with more units than that simply never saw
+ * the rest, and there was no page two to go and find them. It also meant every
+ * visit dragged 300 rows and a 300-key grouped count across the wire to render
+ * a screen showing twenty-five.
+ */
+export async function listAssets(filter: AssetFilter = {}): Promise<Page<AssetRow>> {
+  const perPage = Number.isFinite(filter.perPage)
+    ? Math.min(Math.max(Math.floor(filter.perPage as number), 1), 100)
+    : ASSETS_PER_PAGE;
   const where: Prisma.AssetWhereInput = {};
   if (!filter.includeInactive) where.isActive = true;
   if (filter.siteId) where.siteId = filter.siteId;
@@ -72,10 +109,21 @@ export async function listAssets(filter: AssetFilter = {}): Promise<AssetRow[]> 
     ];
   }
 
+  const total = await prisma.asset.count({ where });
+
+  // Clamp rather than 404. Deleting a unit can shrink the register between the
+  // moment a link is copied and the moment it is opened, and an empty screen
+  // reading "page 9 of 6" helps nobody.
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const page = clampPage(filter.page, pages);
+
   const assets = await prisma.asset.findMany({
     where,
+    // assetTag breaks ties so the sort is total: two units due the same day in
+    // an unstable order would swap between pages and hide one of them.
     orderBy: [{ nextPmDueAt: { sort: 'asc', nulls: 'last' } }, { assetTag: 'asc' }],
-    take: 300,
+    skip: (page - 1) * perPage,
+    take: perPage,
     select: {
       id: true,
       assetTag: true,
@@ -92,7 +140,7 @@ export async function listAssets(filter: AssetFilter = {}): Promise<AssetRow[]> 
     },
   });
 
-  if (assets.length === 0) return [];
+  if (assets.length === 0) return { rows: [], total, page, perPage };
 
   // One grouped count for the whole page rather than a query per row. A site
   // with forty units would otherwise issue forty round trips to a database in
@@ -111,21 +159,57 @@ export async function listAssets(filter: AssetFilter = {}): Promise<AssetRow[]> 
   });
   const repairCount = new Map(repairs.map((r) => [r.assetId, r._count.assetId]));
 
-  return assets.map((a) => ({
-    id: a.id,
-    assetTag: a.assetTag,
-    acType: a.acType,
-    brand: a.brand,
-    model: a.model,
-    btu: a.btu,
-    locationInBuilding: a.locationInBuilding,
-    siteName: a.site.name,
-    customerName: a.site.customer.displayName,
-    customerId: a.site.customerId,
-    nextPmDueAt: a.nextPmDueAt?.toISOString() ?? null,
-    recentRepairs: repairCount.get(a.id) ?? 0,
-    isActive: a.isActive,
-  }));
+  return {
+    rows: assets.map((a) => ({
+      id: a.id,
+      assetTag: a.assetTag,
+      acType: a.acType,
+      brand: a.brand,
+      model: a.model,
+      btu: a.btu,
+      locationInBuilding: a.locationInBuilding,
+      siteName: a.site.name,
+      customerName: a.site.customer.displayName,
+      customerId: a.site.customerId,
+      nextPmDueAt: a.nextPmDueAt?.toISOString() ?? null,
+      recentRepairs: repairCount.get(a.id) ?? 0,
+      isActive: a.isActive,
+    })),
+    total,
+    page,
+    perPage,
+  };
+}
+
+/**
+ * How many units in this page of the register are repeat repairs.
+ *
+ * Counted across the whole filtered register rather than the visible page: a
+ * banner that said "2 units need attention" and changed to "0" when the reader
+ * turned to page two would be describing the page, not the fleet.
+ */
+export async function countRepeatRepairs(filter: AssetFilter = {}): Promise<number> {
+  // Scoped through the relation rather than by fetching every asset id first:
+  // one query that the database answers, instead of a list of ids dragged out
+  // only to be sent straight back in.
+  const grouped = await prisma.jobAsset.groupBy({
+    by: ['assetId'],
+    where: {
+      asset: {
+        ...(filter.includeInactive ? {} : { isActive: true }),
+        ...(filter.siteId ? { siteId: filter.siteId } : {}),
+        ...(filter.customerId ? { site: { customerId: filter.customerId } } : {}),
+      },
+      job: {
+        category: 'REPAIR',
+        createdAt: { gte: since(RECENT_MONTHS) },
+        status: { notIn: ['CANCELLED', 'DRAFT'] },
+      },
+    },
+    _count: { assetId: true },
+  });
+
+  return grouped.filter((g) => repairConcern(g._count.assetId) !== 'none').length;
 }
 
 export interface AssetHistoryRow {
@@ -145,13 +229,31 @@ export interface AssetDetail extends AssetRow {
   lastPmAt: string | null;
   siteId: string;
   siteAddress: string;
+  /** One page of history — see HISTORY_PER_PAGE. */
   history: AssetHistoryRow[];
+  historyTotal: number;
+  historyPage: number;
+  historyPerPage: number;
   /** Every repair on record, not only recent ones. */
   totalRepairs: number;
   totalCleans: number;
 }
 
-export async function getAsset(id: string): Promise<AssetDetail | null> {
+export const HISTORY_PER_PAGE = 15;
+
+/**
+ * One machine, with a page of its history.
+ *
+ * A unit under a quarterly PM contract accumulates four jobs a year before a
+ * single repair is counted, so the oldest register entries will outlive any
+ * fixed cap. The counts above the table are computed by the database over the
+ * whole record; only the table itself is paged, so turning to page two never
+ * changes the totals the page is really about.
+ */
+export async function getAsset(
+  id: string,
+  opts: { historyPage?: number } = {},
+): Promise<AssetDetail | null> {
   const a = await prisma.asset.findUnique({
     where: { id },
     select: {
@@ -178,41 +280,60 @@ export async function getAsset(id: string): Promise<AssetDetail | null> {
           customer: { select: { displayName: true } },
         },
       },
-      jobAssets: {
-        orderBy: { job: { createdAt: 'desc' } },
-        take: 100,
-        select: {
-          note: true,
-          job: {
-            select: {
-              id: true,
-              jobNo: true,
-              category: true,
-              status: true,
-              scheduledDate: true,
-            },
-          },
-        },
-      },
     },
   });
   if (!a) return null;
 
-  const history = a.jobAssets
-    // A job removed after the fact leaves the link behind; skip rather than
-    // render a row with no job number.
-    .filter((ja) => ja.job !== null)
-    .map((ja) => ({
-      jobId: ja.job.id,
-      jobNo: ja.job.jobNo,
-      category: ja.job.category,
-      status: ja.job.status,
-      scheduledDate: ja.job.scheduledDate?.toISOString() ?? null,
-      note: ja.note,
-    }));
+  const historyPerPage = HISTORY_PER_PAGE;
+  const historyTotal = await prisma.jobAsset.count({ where: { assetId: id } });
+  const historyPages = Math.max(1, Math.ceil(historyTotal / historyPerPage));
+  const historyPage = clampPage(opts.historyPage, historyPages);
 
-  const counted = history.filter((h) => h.status !== 'CANCELLED');
-  const cutoff = since(RECENT_MONTHS).toISOString();
+  const links = await prisma.jobAsset.findMany({
+    where: { assetId: id },
+    // createdAt breaks ties on scheduledDate, which is null for anything not
+    // yet booked in — without it those rows shuffle between pages.
+    orderBy: [{ job: { scheduledDate: 'desc' } }, { job: { createdAt: 'desc' } }],
+    skip: (historyPage - 1) * historyPerPage,
+    take: historyPerPage,
+    select: {
+      note: true,
+      job: {
+        select: { id: true, jobNo: true, category: true, status: true, scheduledDate: true },
+      },
+    },
+  });
+
+  // Every link has a job — jobId is required and the row cascades with it, so
+  // there is no orphan case to defend against here.
+  const history = links.map((ja) => ({
+    jobId: ja.job.id,
+    jobNo: ja.job.jobNo,
+    category: ja.job.category,
+    status: ja.job.status,
+    scheduledDate: ja.job.scheduledDate?.toISOString() ?? null,
+    note: ja.note,
+  }));
+
+  // Counted by the database over every job on record, not over the page above.
+  const [totalRepairs, totalCleans, recentRepairs] = await Promise.all([
+    prisma.jobAsset.count({
+      where: { assetId: id, job: { category: 'REPAIR', status: { not: 'CANCELLED' } } },
+    }),
+    prisma.jobAsset.count({
+      where: { assetId: id, job: { category: 'CLEANING_PM', status: { not: 'CANCELLED' } } },
+    }),
+    prisma.jobAsset.count({
+      where: {
+        assetId: id,
+        job: {
+          category: 'REPAIR',
+          status: { not: 'CANCELLED' },
+          scheduledDate: { gte: since(RECENT_MONTHS) },
+        },
+      },
+    }),
+  ]);
 
   return {
     id: a.id,
@@ -235,11 +356,12 @@ export async function getAsset(id: string): Promise<AssetDetail | null> {
     customerId: a.site.customerId,
     customerName: a.site.customer.displayName,
     history,
-    totalRepairs: counted.filter((h) => h.category === 'REPAIR').length,
-    totalCleans: counted.filter((h) => h.category === 'CLEANING_PM').length,
-    recentRepairs: counted.filter(
-      (h) => h.category === 'REPAIR' && (h.scheduledDate ?? '') >= cutoff,
-    ).length,
+    historyTotal,
+    historyPage,
+    historyPerPage,
+    totalRepairs,
+    totalCleans,
+    recentRepairs,
   };
 }
 

@@ -1,6 +1,13 @@
 import Link from 'next/link';
 import { requirePermission } from '@/lib/auth/guard';
-import { listAssets, repairConcern, type AssetRow } from '@/modules/assets/asset.service';
+import {
+  listAssets,
+  countRepeatRepairs,
+  repairConcern,
+  ASSETS_PER_PAGE,
+  type AssetRow,
+} from '@/modules/assets/asset.service';
+import { Pagination, pageParam } from '@/components/ui/Pagination';
 import { AC_TYPE_LABEL } from '@/lib/labels';
 import { formatThaiDate } from '@/lib/date/buddhist';
 import type { AcType } from '@/generated/prisma';
@@ -19,6 +26,7 @@ interface Search {
   q?: string;
   acType?: string;
   pmDue?: string;
+  page?: string;
 }
 
 const inputCls =
@@ -98,19 +106,31 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
   await requirePermission('customer.read', '/assets');
   const sp = await searchParams;
 
+  const filter = {
+    q: sp.q,
+    acType: sp.acType ? (sp.acType as AcType) : undefined,
+    pmDue: sp.pmDue === '1',
+  };
+
   let rows: AssetRow[] = [];
+  let total = 0;
+  let page = 1;
+  let needAttention = 0;
   let dbDown = false;
   try {
-    rows = await listAssets({
-      q: sp.q,
-      acType: sp.acType ? (sp.acType as AcType) : undefined,
-      pmDue: sp.pmDue === '1',
-    });
+    // The banner counts the whole filtered register, so it is a separate query
+    // from the page of rows rather than something derived from them.
+    const [result, attention] = await Promise.all([
+      listAssets({ ...filter, page: pageParam(sp.page) }),
+      countRepeatRepairs(filter),
+    ]);
+    rows = result.rows;
+    total = result.total;
+    page = result.page;
+    needAttention = attention;
   } catch {
     dbDown = true;
   }
-
-  const needAttention = rows.filter((r) => repairConcern(r.recentRepairs) !== 'none').length;
 
   return (
     <div className="space-y-4 max-w-6xl">
@@ -200,13 +220,18 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
             </table>
           </div>
         )}
-      </div>
 
-      {rows.length >= 300 && (
-        <p className="text-[11px] text-[var(--color-muted)]">
-          แสดง 300 รายการแรก — ใช้ช่องค้นหาเพื่อจำกัดผลลัพธ์
-        </p>
-      )}
+        {rows.length > 0 && (
+          <Pagination
+            page={page}
+            total={total}
+            perPage={ASSETS_PER_PAGE}
+            basePath="/assets"
+            params={{ q: sp.q, acType: sp.acType, pmDue: sp.pmDue }}
+            unit="เครื่อง"
+          />
+        )}
+      </div>
     </div>
   );
 }

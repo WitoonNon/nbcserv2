@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePermission } from '@/lib/auth/guard';
-import { getAsset, repairConcern } from '@/modules/assets/asset.service';
+import { getAsset, repairConcern, HISTORY_PER_PAGE } from '@/modules/assets/asset.service';
+import { Pagination, pageParam } from '@/components/ui/Pagination';
 import { AC_TYPE_LABEL, CATEGORY_LABEL } from '@/lib/labels';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatThaiDate } from '@/lib/date/buddhist';
@@ -27,13 +28,20 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export default async function AssetDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AssetDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ h?: string }>;
+}) {
   await requirePermission('customer.read', '/assets');
   const { id } = await params;
+  const { h } = await searchParams;
 
   let asset;
   try {
-    asset = await getAsset(id);
+    asset = await getAsset(id, { historyPage: pageParam(h) });
   } catch {
     return (
       <div className="card p-5 bg-[var(--color-brand-orange-50)] max-w-2xl">
@@ -135,9 +143,17 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
         </p>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-[var(--color-line)]">
+      {/* The anchor is what makes paging usable on a unit with a long record:
+          without it, turning the page drops the reader back at the letterhead
+          and they have to scroll down to the table again every time. */}
+      <div className="card overflow-hidden" id="history">
+        <div className="px-4 py-2.5 border-b border-[var(--color-line)] flex items-baseline justify-between gap-3">
           <h2 className="text-base">ประวัติงานของเครื่องนี้</h2>
+          {asset.historyTotal > 0 && (
+            <span className="text-[12px] text-[var(--color-muted)]">
+              ทั้งหมด {asset.historyTotal.toLocaleString('th-TH')} งาน
+            </span>
+          )}
         </div>
         {asset.history.length === 0 ? (
           <p className="p-4 text-sm text-[var(--color-muted)]">
@@ -183,6 +199,18 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
               </tbody>
             </table>
           </div>
+        )}
+
+        {asset.historyTotal > 0 && (
+          <Pagination
+            page={asset.historyPage}
+            total={asset.historyTotal}
+            perPage={HISTORY_PER_PAGE}
+            basePath={`/assets/${asset.id}`}
+            param="h"
+            hash="#history"
+            unit="งาน"
+          />
         )}
       </div>
     </div>
