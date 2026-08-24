@@ -30,12 +30,20 @@ export async function GET(req: Request) {
   const error = url.searchParams.get('error');
   if (error) return back('/track?line=declined');
 
-  if (!code || !state) return back('/track?line=failed');
+  if (!code || !state) {
+    console.error('[line:callback] LINE ไม่ได้ส่ง code หรือ state กลับมา');
+    return back('/track?line=failed');
+  }
 
   let jobId: string;
   try {
     const verified = verifyState(state);
-    if (!verified) return back('/track?line=failed');
+    if (!verified) {
+      // Tampered, or simply older than fifteen minutes — a customer who
+      // started the flow and finished it much later.
+      console.error('[line:callback] state ใช้ไม่ได้หรือหมดอายุ');
+      return back('/track?line=failed');
+    }
     jobId = verified.jobId;
   } catch (e) {
     if (e instanceof LineLoginError) return back('/track?line=unavailable');
@@ -70,8 +78,22 @@ export async function GET(req: Request) {
     const status = result.alreadyLinked ? 'already' : 'ok';
     return back(`/track?line=${status}`);
   } catch (e) {
-    if (e instanceof IdentityError) return back('/track?line=failed');
-    if (e instanceof LineLoginError) return back('/track?line=failed');
+    // Logged, because the customer only ever sees "ไม่สำเร็จ" and there is
+    // nothing else to go on. This failed silently once already: the booking
+    // path created no CustomerContact, so linking threw IdentityError after
+    // the customer had logged in and added the account, and the only trace
+    // anywhere was a 307 to /track?line=failed.
+    //
+    // No userId and no code in the message — this line goes to a log.
+    if (e instanceof IdentityError) {
+      console.error('[line:callback] ผูกบัญชีไม่ได้', { jobId, reason: e.message });
+      return back('/track?line=failed');
+    }
+    if (e instanceof LineLoginError) {
+      console.error('[line:callback] คุยกับ LINE ไม่สำเร็จ', { jobId, reason: e.message });
+      return back('/track?line=failed');
+    }
+    console.error('[line:callback] ล้มเหลวโดยไม่ทราบสาเหตุ', { jobId, error: String(e) });
     throw e;
   }
 }
