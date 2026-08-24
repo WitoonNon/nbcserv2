@@ -91,3 +91,15 @@ export function env(): Env {
   cached = parsed.data;
   return cached;
 }
+
+/**
+ * Drop the parsed cache so the next `env()` re-reads process.env.
+ *
+ * For tests that must pin a value rather than inherit it. A test that relies
+ * on a default in .env passes until somebody changes .env — and the way that
+ * failed here was a suite that would have sent real LINE messages the moment
+ * the driver was switched on for manual testing.
+ */
+export function resetEnv(): void {
+  cached = null;
+}

@@ -28,5 +28,25 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
+/**
+ * The budget every interactive transaction gets.
+ *
+ * Prisma's defaults — two seconds to acquire a connection, five to finish —
+ * describe a database on the same machine. This one is in Singapore, reached
+ * through a connection pooler, and a transaction that takes a `FOR UPDATE`
+ * lock and makes four round trips can exceed both without anything being
+ * wrong. The failure then reads as a bug rather than as latency: "Unable to
+ * start a transaction in the given time" during a booking, on a slow evening.
+ *
+ * ReadCommitted rather than the default because these transactions serialise
+ * on explicit row locks; they do not need snapshot isolation, and paying for
+ * it invites serialisation failures that the callers do not retry.
+ */
+export const TX_OPTIONS = {
+  isolationLevel: 'ReadCommitted',
+  maxWait: 15_000,
+  timeout: 15_000,
+} as const;
+
 export type { PrismaClient };
 export * from '@/generated/prisma';

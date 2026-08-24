@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { TX_OPTIONS, prisma } from '@/lib/db';
 import { dateOnly } from '@/modules/scheduling/quota.service';
 import { transitionJob } from '@/modules/jobs/status-machine';
 
@@ -206,7 +206,7 @@ export async function assignJob(params: {
       }
       await transitionJob({ jobId: job.id, to: 'ASSIGNED', actorId: params.actorId, actorRole: 'DISPATCHER' }, tx);
     }
-  });
+  }, TX_OPTIONS);
 }
 
 export async function unassignJob(jobId: string, actorId: string | null = null): Promise<void> {
@@ -219,5 +219,5 @@ export async function unassignJob(jobId: string, actorId: string | null = null):
     if (job.status === 'ASSIGNED') {
       await transitionJob({ jobId, to: 'SCHEDULED', actorId, actorRole: 'DISPATCHER' }, tx);
     }
-  });
+  }, TX_OPTIONS);
 }

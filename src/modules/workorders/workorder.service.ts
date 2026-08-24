@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { TX_OPTIONS, prisma } from '@/lib/db';
 import { payloadHash, payloadHashMatches } from '@/lib/forms/payload-hash';
 import type { FormCode, Prisma, SignerRole, WorkOrderStatus } from '@/generated/prisma';
 import { buildValidator, flattenFields, type FormSchema } from '@/lib/forms/types';
@@ -93,6 +93,11 @@ export async function createWorkOrder(params: {
   // sequence and does four round trips to a database in another region; over a
   // pooled connection that alone can exceed 5s, and the failure looks like a
   // bug rather than latency.
+  //
+  // It used to raise `timeout` alone, which is the budget for finishing — not
+  // the budget for *starting*, which defaults to two seconds and is what
+  // actually ran out: "Unable to start a transaction in the given time".
+  // TX_OPTIONS raises both.
   return prisma.$transaction(async (tx) => {
     const existing = await tx.workOrder.findFirst({
       where: { jobId: params.jobId, templateCode: params.code, status: 'DRAFT' },
@@ -129,7 +134,7 @@ export async function createWorkOrder(params: {
     });
 
     return { workOrderId: wo.id, docNo, reused: false };
-  }, { timeout: 15_000 });
+  }, TX_OPTIONS);
 }
 
 // ---------------------------------------------------------------------------
@@ -359,7 +364,7 @@ export async function signWorkOrder(params: {
       },
       select: { signedAt: true },
     });
-  });
+  }, TX_OPTIONS);
 
   return { signedAt: signature.signedAt.toISOString(), payloadHash: hash };
 }

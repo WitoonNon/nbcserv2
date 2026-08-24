@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { TX_OPTIONS, prisma } from '@/lib/db';
 import { Prisma } from '@/generated/prisma';
 import type { QuotaDayStatus, ServiceCategory } from '@/generated/prisma';
 
@@ -324,11 +324,6 @@ export async function bookSlot(req: SlotRequest, sessionKey?: string): Promise<B
  * the system is broken when the truthful answer is that someone else got the
  * slot.
  */
-const TX_OPTIONS = {
-  isolationLevel: 'ReadCommitted',
-  maxWait: 15_000,
-  timeout: 15_000,
-} as const;
 
 /**
  * The consume itself, for callers that already own a transaction.
@@ -441,5 +436,5 @@ export async function releaseSlot(quotaDayId: string, units: number, minutes: nu
         status: 'OPEN',
       },
     });
-  });
+  }, TX_OPTIONS);
 }

@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { env } from '@/lib/env';
-import { callbackUrl } from './line-link';
+import { authorizeUrl, callbackUrl } from './line-link';
 
 /**
  * LINE Login — how a customer's LINE identity gets attached to their booking.
@@ -27,7 +27,6 @@ import { callbackUrl } from './line-link';
  * simply never delivered.
  */
 
-const AUTHORIZE = 'https://access.line.me/oauth2/v2.1/authorize';
 const TOKEN = 'https://api.line.me/oauth2/v2.1/token';
 const PROFILE = 'https://api.line.me/v2/profile';
 
@@ -92,25 +91,9 @@ export function verifyState(state: string, now = Date.now()): { jobId: string } 
 // the flow
 // ---------------------------------------------------------------------------
 
-/**
- * Where to send the customer.
- *
- * `bot_prompt=aggressive` is the point of using login rather than a webhook:
- * it puts an "add friend" step in the same flow, so one tap produces both the
- * userId AND the follow that a push requires. Without it we would learn who
- * someone is and still be unable to message them.
- */
-export function authorizeUrl(state: string): string {
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: credentials().id,
-    redirect_uri: callbackUrl(),
-    state,
-    scope: 'profile openid',
-    bot_prompt: 'aggressive',
-  });
-  return `${AUTHORIZE}?${params}`;
-}
+// Built in line-link.ts, which holds no secret, so the pre-deploy probe can
+// call the very function the application calls rather than a copy of it.
+export { authorizeUrl };
 
 export interface LineProfile {
   userId: string;

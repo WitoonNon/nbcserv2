@@ -33,3 +33,33 @@ export const LINK_JOB_COOKIE = 'nbc_line_link_job';
 
 /** Long enough to read the confirmation and decide, short enough to expire. */
 export const LINK_JOB_COOKIE_MAX_AGE = 30 * 60;
+
+const AUTHORIZE = 'https://access.line.me/oauth2/v2.1/authorize';
+
+/**
+ * Where to send the customer to approve.
+ *
+ * `bot_prompt=aggressive` is the whole reason for choosing login over a
+ * webhook: it puts an "add friend" step inside the same flow, so one tap
+ * yields both the userId AND the follow that a push requires. Without it we
+ * would collect identities we are still not allowed to message.
+ *
+ * Here rather than in line-login.ts because it needs no secret — the channel
+ * id is public, and it appears in the URL. That lets the pre-deploy probe call
+ * this exact function instead of rebuilding the URL, and a probe that builds
+ * its own answer can agree with itself while disagreeing with what ships.
+ */
+export function authorizeUrl(state: string): string {
+  const channelId = env().LINE_LOGIN_CHANNEL_ID;
+  if (!channelId) throw new Error('ยังไม่ได้ตั้งค่า LINE_LOGIN_CHANNEL_ID');
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: channelId,
+    redirect_uri: callbackUrl(),
+    state,
+    scope: 'profile openid',
+    bot_prompt: 'aggressive',
+  });
+  return `${AUTHORIZE}?${params}`;
+}

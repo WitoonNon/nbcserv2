@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/db';
+import { TX_OPTIONS, prisma } from '@/lib/db';
 import type { CreditMode } from '@/generated/prisma';
 import { assertPermission, ForbiddenError } from '@/lib/auth/guard';
 
@@ -81,7 +81,7 @@ export async function saveFeePolicyAction(_prev: FeeState, formData: FormData): 
         where: { key: 'inspection.fee.creditMode' },
         data: { value: creditMode, isAssumption: false },
       });
-    });
+    }, TX_OPTIONS);
 
     revalidatePath('/settings/fees');
     revalidatePath('/settings/assumptions');

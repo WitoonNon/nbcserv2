@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/db';
+import { TX_OPTIONS, prisma } from '@/lib/db';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { getSessionUser, SESSION_COOKIE } from '@/lib/auth/session';
 import { homeFor } from '@/lib/auth/guard';
@@ -67,7 +67,7 @@ export async function changePasswordAction(
           ...(currentTokenHash ? { NOT: { token: currentTokenHash } } : {}),
         },
       });
-    });
+    }, TX_OPTIONS);
 
     destination = homeFor(session);
   } catch (e) {

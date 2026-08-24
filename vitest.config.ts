@@ -24,7 +24,14 @@ export default defineConfig({
     // attachments into the live bucket — so the suite pins itself to the
     // local driver. storage.supabase.test.ts sets its own env and is
     // unaffected.
-    env: { STORAGE_DRIVER: 'local' },
+    //
+    // The same reasoning applies to notifications, and the failure is worse.
+    // Switching NOTIFY_DRIVER to `line` for manual testing made the suite push
+    // to the real LINE account — against userIds invented inside the tests, on
+    // a plan with 300 messages a month. It also turned every notifying test
+    // into a network round trip, which starved the connection pool and timed
+    // out unrelated tests in other files.
+    env: { STORAGE_DRIVER: 'local', NOTIFY_DRIVER: 'console' },
     // Concurrency tests hit real Postgres and must not run against each other.
     fileParallelism: false,
     testTimeout: 30_000,

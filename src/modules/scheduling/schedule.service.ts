@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { TX_OPTIONS, prisma } from '@/lib/db';
 import type { QuotaDayStatus, ServiceCategory } from '@/generated/prisma';
 import { dateOnly } from './quota.service';
 
@@ -103,7 +103,7 @@ export async function setDayStatus(params: {
     }
 
     return targets.length;
-  });
+  }, TX_OPTIONS);
 }
 
 export async function getQuotaRules() {
@@ -296,7 +296,7 @@ export async function setDayCapacity(params: {
     }
 
     return { updated: buckets.length, nowFull };
-  });
+  }, TX_OPTIONS);
 }
 
 /** One day's buckets plus the override history behind them. */

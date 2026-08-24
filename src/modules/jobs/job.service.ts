@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { TX_OPTIONS, prisma } from '@/lib/db';
 import type { AcType, CreatedVia, JobSize, ServiceCategory } from '@/generated/prisma';
 import { nextDocumentNo } from '@/modules/workorders/sequence.service';
 import { applyInspectionFee } from '@/modules/billing/fee.service';
@@ -109,7 +109,7 @@ export async function createJobFromIntake(input: IntakeInput): Promise<{ jobId: 
     }
 
     return { jobId: job.id, jobNo };
-  });
+  }, TX_OPTIONS);
 }
 
 // ---------------------------------------------------------------------------

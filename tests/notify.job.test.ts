@@ -5,6 +5,8 @@ import {
   lineRecipientForJob,
 } from '../src/modules/customers/identity.service';
 import { notifyJob } from '../src/modules/notifications/notify.service';
+import { resetEnv } from '../src/lib/env';
+import { resetNotifier } from '../src/lib/notify';
 
 /**
  * Linking a LINE account, and what gets sent afterwards.
@@ -19,9 +21,11 @@ import { notifyJob } from '../src/modules/notifications/notify.service';
  *    first-time customer has no LINE account at booking time and links
  *    seconds later, while a returning customer is reachable immediately.
  *
- * Runs against the real database. NOTIFY_DRIVER stays on `console`, so the
- * send succeeds without touching LINE and without spending any of the 300
- * messages a month the account actually has.
+ * Runs against the real database, with NOTIFY_DRIVER pinned to `console` — set
+ * here rather than inherited from .env. It was inherited at first, and that
+ * held only until the driver was switched to `line` for manual testing: the
+ * suite would then have pushed to LINE for real, against userIds invented in
+ * this file, on an account with 300 messages a month.
  */
 
 const PHONE = '0899999311';
@@ -63,6 +67,10 @@ async function cleanUp() {
 }
 
 beforeAll(async () => {
+  process.env.NOTIFY_DRIVER = 'console';
+  resetEnv();
+  resetNotifier();
+
   await cleanUp();
 
   const customer = await prisma.customer.create({

@@ -86,6 +86,11 @@ class EmailAdapter implements NotificationChannelAdapter {
 
 let cached: NotificationChannelAdapter | null = null;
 
+/** Drop the cached adapter, so a change of driver takes effect. @see resetEnv */
+export function resetNotifier(): void {
+  cached = null;
+}
+
 export function notifier(): NotificationChannelAdapter {
   if (cached) return cached;
   switch (env().NOTIFY_DRIVER) {
