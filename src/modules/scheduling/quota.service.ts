@@ -363,19 +363,39 @@ export async function bookSlotWithin(
   if (bucket.status !== 'OPEN') throw new QuotaUnavailableError('CLOSED');
 
   // 2. Count live holds belonging to *other* sessions.
-  const heldRows = await tx.$queryRaw<{ units: bigint | null; minutes: bigint | null }[]>`
-    SELECT SUM("units") AS "units", SUM("minutes") AS "minutes"
-      FROM "quota_holds"
-     WHERE "quotaDayId" = ${bucket.id}
-       AND "expiresAt" > NOW()
-       ${sessionKey ? Prisma.sql`AND "sessionKey" <> ${sessionKey}` : Prisma.empty}
-  `;
+  //
+  // Built with `Prisma.sql` and passed as an ARGUMENT, not written as a tagged
+  // template on $queryRaw. The tagged form turns every `${}` into a bind
+  // parameter — including a nested Prisma.sql fragment, which came out as
+  // `... AND "expiresAt" > NOW() $2` and failed with a Postgres syntax error.
+  //
+  // It fired only when a sessionKey was supplied, which is exactly and only
+  // the real booking path: no test passed one, so every customer booking
+  // through the website failed while the suite stayed green.
+  const heldRows = await tx.$queryRaw<
+    { jobs: bigint | null; units: bigint | null; minutes: bigint | null }[]
+  >(
+    Prisma.sql`
+      SELECT COUNT(*) AS "jobs", SUM("units") AS "units", SUM("minutes") AS "minutes"
+        FROM "quota_holds"
+       WHERE "quotaDayId" = ${bucket.id}
+         AND "expiresAt" > NOW()
+         ${sessionKey ? Prisma.sql`AND "sessionKey" <> ${sessionKey}` : Prisma.empty}
+    `,
+  );
+  // A hold is one job as well as its units and minutes. Counting it on the
+  // other two axes but not this one meant that on a day limited by JOB count —
+  // which is how the client asked for capacity to be expressed — a hold held
+  // nothing at all: a second customer could take the last slot out from under
+  // somebody who was still typing their address, which is the exact situation
+  // holds exist to prevent.
+  const heldJobs = Number(heldRows[0]?.jobs ?? 0);
   const heldUnits = Number(heldRows[0]?.units ?? 0);
   const heldMinutes = Number(heldRows[0]?.minutes ?? 0);
 
   // 3. Check every configured axis.
   const dateLabel = dateOnly(req.date).toISOString().slice(0, 10);
-  if (bucket.capacityJobs !== null && bucket.usedJobs + 1 > bucket.capacityJobs) {
+  if (bucket.capacityJobs !== null && bucket.usedJobs + heldJobs + 1 > bucket.capacityJobs) {
     throw new QuotaExceededError('jobs', dateLabel);
   }
   if (

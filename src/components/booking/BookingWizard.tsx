@@ -183,6 +183,21 @@ export function BookingWizard({
   // customer actually changes what they are booking — which genuinely changes
   // the answer, since a 40-unit job and a 1-unit job do not share free days.
   const mounted = useRef(false);
+  // Reload availability when the customer changes WHAT they are booking — and
+  // only then.
+  //
+  // `initialFee` used to be a dependency, which looked harmless because it is
+  // read once on mount. It is an object handed down from a server component,
+  // so its identity changes whenever the route re-renders on the server — and
+  // holding a slot does exactly that, because holdSlotAction sets the booking
+  // session cookie and Next re-renders a route whose cookies an action
+  // touched. The effect then fired and cleared the date the customer had just
+  // chosen, bouncing them back to step 2.
+  //
+  // It only ever happened on somebody's FIRST booking, since the cookie exists
+  // on every attempt after that — which is why it survived manual testing on
+  // machines that had already booked once, and would have hit almost every
+  // real customer.
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
@@ -202,7 +217,10 @@ export function BookingWizard({
       setCalendar(res.calendar);
       setFee(res.fee);
     });
-  }, [category, acType, unitCount, initialFee]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialFee is
+    // read only on the first run; including it re-runs this on every server
+    // re-render and discards the customer's chosen date.
+  }, [category, acType, unitCount]);
 
   async function pickDate(date: string) {
     if (!calendar) return;

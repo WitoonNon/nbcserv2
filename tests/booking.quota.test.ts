@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { prisma } from '../src/lib/db';
-import { dateOnly, isCapacityRefusal } from '../src/modules/scheduling/quota.service';
+import { dateOnly, holdSlot, isCapacityRefusal } from '../src/modules/scheduling/quota.service';
 import { createJobFromBooking, createJobFromIntake } from '../src/modules/jobs/job.service';
 
 /**
@@ -204,5 +204,63 @@ describe('customer booking consumes quota', () => {
     });
     expect(bucket.usedJobs).toBe(0);
     expect(bucket.usedMinutes).toBe(0);
+  });
+});
+
+describe('booking while holds are outstanding', () => {
+  /**
+   * Everything in this block passes a sessionKey, and nothing above it does.
+   *
+   * That gap shipped a bug: the query counting other sessions' holds spliced a
+   * `Prisma.sql` fragment into a `$queryRaw` tagged template, which turns every
+   * interpolation into a bind parameter rather than SQL. The statement reached
+   * Postgres as `... AND "expiresAt" > NOW() $2` and failed on syntax — but
+   * only when a sessionKey was supplied, which is only ever the real booking
+   * path. The suite stayed green while no customer could book at all.
+   */
+  const SESSION_A = 'test-session-a';
+  const SESSION_B = 'test-session-b';
+
+  beforeEach(async () => {
+    await clearTestJobs();
+    await prisma.quotaHold.deleteMany({});
+  });
+
+  it('completes a booking that carries a session key', async () => {
+    await resetBucket(5, 480);
+
+    const result = await createJobFromBooking({ ...booking(1, 30), sessionKey: SESSION_A });
+
+    expect(result.jobNo).toBeTruthy();
+  });
+
+  it('does not let a customer block themselves with their own hold', async () => {
+    await resetBucket(1, null);
+
+    // The hold exists precisely so the slot survives while they type their
+    // address. Counting it against them would make the last slot on a day
+    // impossible to actually book.
+    await holdSlot(
+      { date: TEST_DATE, zoneId, category: 'CLEANING_PM', units: 1, minutes: 30 },
+      SESSION_A,
+    );
+
+    const result = await createJobFromBooking({ ...booking(1, 30), sessionKey: SESSION_A });
+    expect(result.jobNo).toBeTruthy();
+  });
+
+  it("counts somebody else's hold against the last slot", async () => {
+    await resetBucket(1, null);
+
+    await holdSlot(
+      { date: TEST_DATE, zoneId, category: 'CLEANING_PM', units: 1, minutes: 30 },
+      SESSION_B,
+    );
+
+    // Someone else is mid-checkout for the only slot left. Selling it twice is
+    // worse than telling this customer to pick another day.
+    await expect(
+      createJobFromBooking({ ...booking(1, 30), sessionKey: SESSION_A }),
+    ).rejects.toSatisfy(isCapacityRefusal);
   });
 });
