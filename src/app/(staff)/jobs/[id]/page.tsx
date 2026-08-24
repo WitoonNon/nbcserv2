@@ -7,6 +7,9 @@ import { CATEGORY_LABEL, JOB_SIZE_LABEL } from '@/lib/labels';
 import { formatThaiDate } from '@/lib/date/buddhist';
 import { formatTHB } from '@/lib/utils';
 import { openWorkOrderAction } from '@/app/(staff)/work-orders/d/[id]/actions';
+import { requirePermission, can } from '@/lib/auth/guard';
+import { selectableAssetsForJob } from '@/modules/assets/asset.service';
+import { JobAssetPicker } from '@/components/jobs/JobAssetPicker';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +60,7 @@ function timeOf(d: Date) {
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await requirePermission('job.read', `/jobs/${id}`);
   const job = await loadJob(id);
 
   if (job === undefined) {
@@ -67,6 +71,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     );
   }
   if (!job) notFound();
+
+  // Never fatal: the job page has to open even if the register is unreachable.
+  const selectableAssets = await selectableAssetsForJob(id).catch(() => []);
 
   const net = job.charges.reduce((s, c) => s + Number(c.amountSigned), 0);
 
@@ -141,6 +148,14 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
       </div>
 
       {/* Work orders */}
+      {/* Which machines the work covers. Until this existed the register could
+          show a unit's repair history and nothing ever wrote one. */}
+      <JobAssetPicker
+        jobId={job.id}
+        assets={selectableAssets}
+        canEdit={can(user, 'job.update')}
+      />
+
       <div className="card p-4">
         <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
           <h2 className="text-base">ใบงานที่ผูกอยู่</h2>

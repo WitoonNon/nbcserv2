@@ -256,3 +256,102 @@ export function repairConcern(recentRepairs: number): 'none' | 'watch' | 'high' 
   if (recentRepairs === 2) return 'watch';
   return 'none';
 }
+
+// ---------------------------------------------------------------------------
+// Linking a job to the machines it is about
+// ---------------------------------------------------------------------------
+
+export class AssetLinkError extends Error {}
+
+export interface SelectableAsset {
+  id: string;
+  assetTag: string;
+  acType: AcType;
+  brand: string | null;
+  locationInBuilding: string | null;
+  selected: boolean;
+}
+
+/**
+ * The machines a job could plausibly be about, and which are already on it.
+ *
+ * Scoped to the job's own site. A register that let a dispatcher tick a
+ * machine belonging to another customer would put one customer's equipment
+ * into another's service history — and the register's whole value is that its
+ * history can be trusted.
+ */
+export async function selectableAssetsForJob(jobId: string): Promise<SelectableAsset[]> {
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: { siteId: true, assets: { select: { assetId: true } } },
+  });
+  if (!job) return [];
+
+  const chosen = new Set(job.assets.map((a) => a.assetId).filter(Boolean));
+  const assets = await prisma.asset.findMany({
+    where: { siteId: job.siteId, isActive: true },
+    orderBy: { assetTag: 'asc' },
+    select: { id: true, assetTag: true, acType: true, brand: true, locationInBuilding: true },
+  });
+
+  return assets.map((a) => ({ ...a, selected: chosen.has(a.id) }));
+}
+
+/**
+ * Set which machines a job covers.
+ *
+ * Adds and removes the difference rather than replacing the whole set, so a
+ * note a technician left on a link survives someone ticking an extra box.
+ */
+export async function setJobAssets(params: {
+  jobId: string;
+  assetIds: string[];
+}): Promise<{ added: number; removed: number }> {
+  const job = await prisma.job.findUnique({
+    where: { id: params.jobId },
+    select: { siteId: true, assets: { select: { id: true, assetId: true } } },
+  });
+  if (!job) throw new AssetLinkError('ไม่พบงานที่ระบุ');
+
+  const wanted = new Set(params.assetIds);
+
+  // Everything ticked must belong to this job's site. Checked against the
+  // database rather than trusted from the form: the ids arrive from a browser.
+  if (wanted.size > 0) {
+    const valid = await prisma.asset.findMany({
+      where: { id: { in: [...wanted] }, siteId: job.siteId },
+      select: { id: true },
+    });
+    if (valid.length !== wanted.size) {
+      throw new AssetLinkError('มีเครื่องที่ไม่ได้อยู่ในหน้างานของงานนี้');
+    }
+  }
+
+  const current = new Map(job.assets.filter((a) => a.assetId).map((a) => [a.assetId!, a.id]));
+  const toAdd = [...wanted].filter((id) => !current.has(id));
+  const toRemove = [...current.entries()].filter(([assetId]) => !wanted.has(assetId));
+
+  if (toRemove.length > 0) {
+    await prisma.jobAsset.deleteMany({ where: { id: { in: toRemove.map(([, rowId]) => rowId) } } });
+  }
+
+  if (toAdd.length > 0) {
+    const details = await prisma.asset.findMany({
+      where: { id: { in: toAdd } },
+      select: { id: true, acType: true, assetTag: true },
+    });
+    await prisma.jobAsset.createMany({
+      data: details.map((d) => ({
+        jobId: params.jobId,
+        assetId: d.id,
+        // Snapshot, so the job still reads correctly if the machine is later
+        // renamed or reclassified.
+        acTypeSnapshot: d.acType,
+        descriptionSnapshot: d.assetTag,
+        quantity: 1,
+      })),
+    });
+  }
+
+  return { added: toAdd.length, removed: toRemove.length };
+}
