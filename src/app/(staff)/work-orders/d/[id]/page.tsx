@@ -4,6 +4,8 @@ import { getWorkOrder } from '@/modules/workorders/workorder.service';
 import { requirePermission, can } from '@/lib/auth/guard';
 import { canViewWorkOrder } from '@/modules/workorders/access';
 import { WorkOrderEditor } from '@/components/forms/WorkOrderEditor';
+import { LateAttachments } from '@/components/forms/LateAttachments';
+import { listLateAttachments } from '@/modules/media/attachment.service';
 import { formatThaiDate } from '@/lib/date/buddhist';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +38,10 @@ export default async function WorkOrderDocumentPage({
     );
   }
   if (!workOrder) notFound();
+
+  // Never fatal: a work order still has to open when the media table is
+  // unreachable, because the form is the part somebody came here to read.
+  const lateAttachments = await listLateAttachments(id).catch(() => []);
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -98,6 +104,17 @@ export default async function WorkOrderDocumentPage({
         canSubmit={can(user, 'workorder.submit')}
         canApprove={can(user, 'workorder.approve')}
       />
+
+      {/* Below the form, never inside it. These files were not part of the
+          payload the customer's signature covers, and the layout is what says
+          so at a glance. */}
+      {workOrder.status !== 'DRAFT' && (
+        <LateAttachments
+          workOrderId={workOrder.id}
+          attachments={lateAttachments}
+          canAttach={can(user, 'workorder.approve')}
+        />
+      )}
 
       <p className="text-center text-sm text-[var(--color-brand-navy)] pb-4">
         ขอบคุณที่ไว้วางใจในบริการของเรา ❄
