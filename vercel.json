@@ -9,5 +9,8 @@
       "path": "/api/cron/sweep-holds",
       "schedule": "0 18 * * *"
     }
+  ],
+  "regions": [
+    "sin1"
   ]
 }
