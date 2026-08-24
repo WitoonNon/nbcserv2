@@ -47,18 +47,51 @@ export async function seedForms() {
   }
 
   // Notification templates — bodies use {{placeholders}} resolved at send time.
+  //
+  // Written as a person would write them, not as a system would. These arrive
+  // in a customer's LINE alongside messages from their family: one unbroken
+  // line of fields reads as an automated notice and gets muted, which defeats
+  // the point of having asked them to link an account at all.
+  //
+  // Short lines, because LINE renders them on a phone. And a telephone number
+  // on the arrival message, because the one person guaranteed to need it is
+  // the customer standing in their doorway who cannot see a technician.
   const notifications = [
     {
       code: 'JOB_CONFIRMED',
-      bodyTh: 'NBC Group ยืนยันการรับงาน {{jobNo}} วันที่ {{scheduledDate}} ติดตามสถานะได้ที่ {{trackUrl}}',
+      bodyTh:
+        'NBC Group ยืนยันการจองแล้วครับ
+
+' +
+        'เลขที่งาน {{jobNo}}
+' +
+        'วันที่นัดหมาย {{scheduledDate}}
+
+' +
+        'เจ้าหน้าที่จะติดต่อกลับเพื่อยืนยันช่วงเวลาอีกครั้งครับ
+' +
+        'ติดตามสถานะงานได้ที่ {{trackUrl}}',
     },
     {
       code: 'TECH_EN_ROUTE',
-      bodyTh: 'ช่างกำลังเดินทางไปหน้างาน {{jobNo}} คาดว่าถึงเวลา {{eta}}',
+      bodyTh:
+        'ช่างกำลังเดินทางไปหน้างานครับ
+
+' +
+        'เลขที่งาน {{jobNo}}
+' +
+        'คาดว่าถึงประมาณ {{eta}}',
     },
     {
       code: 'TECH_ON_SITE',
-      bodyTh: 'ช่างถึงหน้างานแล้ว งาน {{jobNo}}',
+      bodyTh:
+        'ช่างถึงหน้างานแล้วครับ
+
+' +
+        'เลขที่งาน {{jobNo}}
+
+' +
+        'หากไม่พบช่าง โทร 02-000-7332 ต่อ 1-3 ได้เลยครับ',
     },
     {
       code: 'QUOTATION_SENT',
