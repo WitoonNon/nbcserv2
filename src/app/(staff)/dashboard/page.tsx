@@ -3,6 +3,12 @@ import { prisma } from '@/lib/db';
 import { formatTHB } from '@/lib/utils';
 import { formatThaiDate } from '@/lib/date/buddhist';
 import { dateOnly } from '@/modules/scheduling/quota.service';
+import { loadDashboardCharts } from '@/modules/reports/dashboard.service';
+import {
+  JobsByMonthChart,
+  JobStatusChart,
+  UpcomingLoadChart,
+} from '@/components/charts/DashboardCharts';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +62,9 @@ function Tile({ label, value, sub }: { label: string; value: string | number; su
 }
 
 export default async function DashboardPage() {
-  const stats = await loadStats();
+  // Side by side, not one after the other: the charts are three grouped
+  // queries and the tiles are ten counts, and none of them depend on another.
+  const [stats, charts] = await Promise.all([loadStats(), loadDashboardCharts()]);
 
   return (
     <div className="space-y-6">
@@ -104,6 +112,19 @@ npm run db:seed`}
               <Tile label="ราคาเริ่มต้น" value={formatTHB(500)} sub="ล้างแอร์ติดผนัง (ในสัญญา)" />
             </div>
           </section>
+
+          {/* Below the tiles. The counts are what the office opens this screen
+              for; the charts are the second question, and they are the part
+              that costs something to draw. */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {charts.months && (
+              <div className="lg:col-span-2">
+                <JobsByMonthChart data={charts.months} />
+              </div>
+            )}
+            {charts.load && <UpcomingLoadChart data={charts.load} />}
+            {charts.statuses && <JobStatusChart data={charts.statuses} />}
+          </div>
 
           <section className="card p-4 border-[var(--color-brand-orange)]/40 bg-[var(--color-brand-orange-50)]/40">
             <div className="flex items-start justify-between gap-4 flex-wrap">

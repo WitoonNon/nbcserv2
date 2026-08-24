@@ -24,6 +24,7 @@
     "client-confirm": "node scripts/list-client-confirm.mjs"
   },
   "dependencies": {
+    "@ant-design/plots": "^2.6.8",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "clsx": "^2.1.1",
