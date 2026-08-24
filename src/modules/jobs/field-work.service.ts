@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/db';
-import { notifyJobSafely } from '@/modules/notifications/notify.service';
 import type { JobStatus } from '@/generated/prisma';
 import { transitionJob, InvalidTransitionError } from './status-machine';
 
@@ -90,7 +89,7 @@ export async function advanceFieldJob(params: {
   lng?: number | null;
   /** When the technician pressed the button, which is not when it reached us. */
   occurredAt?: Date;
-}): Promise<{ from: JobStatus; to: JobStatus }> {
+}): Promise<{ from: JobStatus; to: JobStatus; notifyArrival: boolean }> {
   if (!params.technicianId) {
     throw new FieldWorkError('บัญชีนี้ไม่ได้ผูกกับช่างคนไหน');
   }
@@ -113,14 +112,11 @@ export async function advanceFieldJob(params: {
       occurredAt: params.occurredAt,
     });
 
-    if (params.to === 'ON_SITE' && isFresh(params.occurredAt)) {
-      // After the transaction, never inside it. A third party's rate limit
-      // must not hold a database lock, and a customer being unreachable must
-      // not roll back the fact that the technician arrived.
-      await notifyJobSafely({ jobId: params.jobId, templateCode: 'TECH_ON_SITE' });
-    }
-
-    return moved;
+    // Reported, not sent. Telling the customer is the caller's job, so it can
+    // be scheduled to run after the response — a technician standing on a roof
+    // waiting for a button to turn green must not be waiting on LINE — and so
+    // this module stays testable without a request context.
+    return { ...moved, notifyArrival: params.to === 'ON_SITE' && isFresh(params.occurredAt) };
   } catch (e) {
     if (e instanceof InvalidTransitionError) {
       // Two taps on a slow connection, or the office moved the job first.

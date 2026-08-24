@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { env } from '@/lib/env';
 
 /**
@@ -143,6 +144,27 @@ export async function messageQuota(): Promise<QuotaStatus> {
 }
 
 /**
+ * Turn a readable key into the UUID LINE insists on.
+ *
+ * LINE rejects anything that is not a UUID with
+ * `The value for the 'X-Line-Retry-Key' parameter is invalid` — a 400 that
+ * looks like the message was refused rather than the header. Callers pass
+ * something meaningful like `<jobId>:TECH_ON_SITE`, and it is hashed here.
+ *
+ * Deterministic on purpose: the same logical send must produce the same key
+ * every time, or retrying stops being deduplicated and the customer gets the
+ * message twice. This is UUIDv5 in shape — SHA-1 of the name, with the version
+ * and variant bits set — so the value is both stable and syntactically valid.
+ */
+export function retryKeyUuid(key: string): string {
+  const h = createHash('sha1').update(key).digest();
+  h[6] = (h[6]! & 0x0f) | 0x50; // version 5
+  h[8] = (h[8]! & 0x3f) | 0x80; // RFC 4122 variant
+  const hex = h.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
  * Push a text message to one LINE user.
  *
  * `retryKey` makes the send idempotent at LINE's end: a request that times out
@@ -156,7 +178,7 @@ export async function pushText(
   retryKey?: string,
 ): Promise<{ ok: true } | never> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (retryKey) headers['X-Line-Retry-Key'] = retryKey;
+  if (retryKey) headers['X-Line-Retry-Key'] = retryKeyUuid(retryKey);
 
   const res = await authedFetch('/v2/bot/message/push', {
     method: 'POST',

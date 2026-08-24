@@ -153,15 +153,32 @@ describe('what a failed push means', () => {
 });
 
 describe('the push request itself', () => {
-  it('sends the retry key so a timeout cannot deliver twice', async () => {
+  it('sends the retry key as a UUID, which is the only form LINE accepts', async () => {
     const { pushText } = await loadLine();
     await pushText(`U${'a'.repeat(32)}`, 'ทดสอบ', 'job-42-arrived');
 
     const push = calls.find((c) => c.url.includes('/message/push'))!;
-    // Without this, a request that times out and is retried arrives as two
-    // messages — an annoyance the customer remembers, and two of the 300.
-    expect(push.headers['X-Line-Retry-Key']).toBe('job-42-arrived');
+    // Without a retry key, a request that times out and is retried arrives as
+    // two messages — an annoyance the customer remembers, and two of the 300.
+    //
+    // With a readable one, nothing arrives at all: LINE answers 400 with "The
+    // value for the 'X-Line-Retry-Key' parameter is invalid", which reads like
+    // the message was refused rather than the header. That is how the first
+    // real notification failed.
+    expect(push.headers['X-Line-Retry-Key']).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(push.headers.Authorization).toMatch(/^Bearer tok-/);
+  });
+
+  it('derives the same key for the same send, and a different one otherwise', async () => {
+    const { retryKeyUuid } = await loadLine();
+
+    // Stability is the whole point: a key that changed between attempts would
+    // make every retry a fresh message rather than the same one.
+    expect(retryKeyUuid('job-1:TECH_ON_SITE')).toBe(retryKeyUuid('job-1:TECH_ON_SITE'));
+    expect(retryKeyUuid('job-1:TECH_ON_SITE')).not.toBe(retryKeyUuid('job-1:JOB_CONFIRMED'));
+    expect(retryKeyUuid('job-1:TECH_ON_SITE')).not.toBe(retryKeyUuid('job-2:TECH_ON_SITE'));
   });
 
   it('keeps Thai intact and stays inside the length limit', async () => {

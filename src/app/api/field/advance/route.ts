@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { JobStatus } from '@/generated/prisma';
 import { getSessionUser } from '@/lib/auth/session';
+import { after } from 'next/server';
 import { advanceFieldJob, FieldWorkError } from '@/modules/jobs/field-work.service';
+import { notifyJobSafely } from '@/modules/notifications/notify.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +56,17 @@ export async function POST(req: Request) {
       // technician actually arrived — the request time could be hours later.
       occurredAt: form.get('occurredAt') ? new Date(String(form.get('occurredAt'))) : undefined,
     });
+
+    // Scheduled after the response, so the technician's button turns green at
+    // the speed of the database rather than the speed of LINE. On serverless a
+    // promise left floating can be frozen the instant the response is sent, so
+    // the message would sometimes just never arrive.
+    if (result.notifyArrival) {
+      after(async () => {
+        await notifyJobSafely({ jobId, templateCode: 'TECH_ON_SITE' });
+      });
+    }
+
     return NextResponse.json(result);
   } catch (e) {
     if (e instanceof FieldWorkError) {

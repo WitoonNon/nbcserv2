@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import type { AcType, ServiceCategory } from '@/generated/prisma';
 import {
   getBookingCalendar,
@@ -203,7 +204,18 @@ export async function confirmBookingAction(
     // Reaches a returning customer who linked LINE on an earlier booking. A
     // first-time customer has no account to reach yet, so this quietly does
     // nothing and the callback sends it after they link.
-    await notifyJobSafely({ jobId: result.jobId, templateCode: 'JOB_CONFIRMED', once: true });
+    //
+    // Deferred with `after` rather than awaited. It is two database reads and
+    // an HTTPS round trip to LINE, and the customer was made to wait for all
+    // of it before their confirmation appeared — for a message that, on their
+    // first booking, was never going to be sent anyway.
+    //
+    // `after` rather than a floating promise because this runs on serverless:
+    // work started and not awaited can be frozen the moment the response is
+    // returned, so the notification would sometimes simply vanish.
+    after(async () => {
+      await notifyJobSafely({ jobId: result.jobId, templateCode: 'JOB_CONFIRMED', once: true });
+    });
 
     return { jobNo: result.jobNo, scheduledDate: date, canLinkLine: true };
   } catch (e) {

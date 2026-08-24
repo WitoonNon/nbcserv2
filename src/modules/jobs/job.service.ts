@@ -213,10 +213,14 @@ export async function createJobFromBooking(
       // Matched on phone within this customer rather than created blindly: a
       // returning customer booking a second job is the same person, and a
       // second row would split their identity and their notifications.
-      const existingContact = await tx.customerContact.findFirst({
-        where: { customerId: customer.id, phone: input.phone },
-        select: { id: true },
+      // Every query in this transaction is a round trip to another region, so
+      // one read answers both questions: is this booker already a contact, and
+      // does the customer have any contact at all.
+      const contacts = await tx.customerContact.findMany({
+        where: { customerId: customer.id },
+        select: { id: true, phone: true },
       });
+      const existingContact = contacts.find((c) => c.phone === input.phone);
       if (!existingContact) {
         await tx.customerContact.create({
           data: {
@@ -227,7 +231,7 @@ export async function createJobFromBooking(
             email: input.email ?? null,
             // First contact on a walk-up customer is the primary one; a
             // customer created by the office may already have one.
-            isPrimary: (await tx.customerContact.count({ where: { customerId: customer.id } })) === 0,
+            isPrimary: contacts.length === 0,
           },
         });
       }
