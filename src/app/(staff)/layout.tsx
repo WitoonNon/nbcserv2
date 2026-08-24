@@ -20,6 +20,8 @@ const NAV = [
   { href: '/customers', label: 'ลูกค้า', en: 'Customers', perm: 'customer.read' },
   { href: '/assets', label: 'ทะเบียนเครื่อง', en: 'Assets', perm: 'customer.read' },
   { href: '/work-orders', label: 'ใบงาน', en: 'Work orders', perm: 'workorder.read' },
+  { href: '/timesheet', label: 'ลงเวลางาน', en: 'Timesheet', perm: 'admin.config' },
+  { href: '/payroll', label: 'เงินเดือน', en: 'Payroll', perm: 'admin.config' },
   { href: '/reports', label: 'รายงาน', en: 'Reports', perm: 'report.read' },
   { href: '/settings', label: 'ตั้งค่า', en: 'Settings', perm: 'admin.config' },
 ];

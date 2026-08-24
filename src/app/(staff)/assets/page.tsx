@@ -4,7 +4,7 @@ export default function Page() {
   return (
     <ComingSoon
       title="ทะเบียนเครื่องปรับอากาศ"
-      phase="Phase 4"
+      phase="เฟส 3"
       bullets={[
     'ทะเบียนเครื่องรายตัว ยี่ห้อ รุ่น Serial No. ตำแหน่งติดตั้ง',
     'ประวัติการล้าง ซ่อม และอะไหล่ที่เปลี่ยนของเครื่องนั้น',

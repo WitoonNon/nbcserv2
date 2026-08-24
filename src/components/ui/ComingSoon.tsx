@@ -8,10 +8,20 @@ export function ComingSoon({
   title,
   phase,
   bullets,
+  note,
 }: {
   title: string;
   phase: string;
   bullets: string[];
+  /**
+   * What is actually true about this screen's progress.
+   *
+   * The default claims the database is already built, which was accurate for
+   * the screens this component was written for and is a lie for one where no
+   * table exists yet. A client reads this line and plans around it, so it has
+   * to be per-screen rather than a constant.
+   */
+  note?: React.ReactNode;
 }) {
   return (
     <div className="space-y-4 max-w-3xl">
@@ -33,10 +43,14 @@ export function ComingSoon({
       </div>
 
       <p className="text-xs text-[var(--color-muted)]">
-        โครงสร้างฐานข้อมูลของหน้านี้สร้างเสร็จแล้ว เหลือเฉพาะส่วนหน้าจอ ·{' '}
-        <Link href="/work-orders" className="text-[var(--color-brand-blue-600)]">
-          ดูฟอร์มใบงานที่ทำเสร็จแล้ว
-        </Link>
+        {note ?? (
+          <>
+            โครงสร้างฐานข้อมูลของหน้านี้สร้างเสร็จแล้ว เหลือเฉพาะส่วนหน้าจอ ·{' '}
+            <Link href="/work-orders" className="text-[var(--color-brand-blue-600)]">
+              ดูฟอร์มใบงานที่ทำเสร็จแล้ว
+            </Link>
+          </>
+        )}
       </p>
     </div>
   );
