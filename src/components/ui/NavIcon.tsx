@@ -25,6 +25,7 @@ export type NavIconName =
   | 'customers'
   | 'assets'
   | 'workOrders'
+  | 'employees'
   | 'timesheet'
   | 'payroll'
   | 'reports'
@@ -91,6 +92,17 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
       <rect x="4.4" y="2.8" width="15.2" height="18.4" rx="3" />
       <path d="M8.6 7.8h6.8" />
       <path d="m8.6 13.8 2.4 2.4 4.4-4.8" />
+    </>
+  ),
+
+  // An ID card: a portrait and two lines of detail. Distinct from `customers`
+  // — that icon is people, this one is their file.
+  employees: (
+    <>
+      <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2.6" />
+      <circle cx="8.4" cy="10.6" r="2.1" />
+      <path d="M5.2 16.2a3.4 3.4 0 0 1 6.4 0" />
+      <path d="M14.6 10h4.2M14.6 14h2.8" />
     </>
   ),
 

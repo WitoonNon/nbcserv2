@@ -23,13 +23,14 @@ model User {
   mustChangePassword Boolean   @default(true)
   passwordChangedAt  DateTime?
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   roles            UserRole[]
   sessions         Session[]
   auditLogs        AuditLog[]
   technician       Technician?
+  employee         Employee?
   customerContact  CustomerContact?
   jobStatusEvents  JobStatusEvent[]
   jobsCreated      Job[]              @relation("JobCreatedBy")

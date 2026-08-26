@@ -6,6 +6,7 @@ import { seedScheduling } from './04-scheduling.js';
 import { seedBilling } from './05-billing.js';
 import { seedForms } from './06-forms.js';
 import { seedDemo } from './07-demo.js';
+import { seedEmployees } from './08-employees.js';
 
 /**
  * Seed order matters: platform config and RBAC first, then reference data,
@@ -23,6 +24,9 @@ async function main() {
   await seedBilling();
   await seedForms();
   await seedDemo();
+  // After demo: staff records are built from the users and technicians that
+  // the steps above created.
+  await seedEmployees();
 
   // Materialise quota buckets so the booking calendar has something to render.
   const { materialiseQuota } = await import('../../src/modules/scheduling/quota.service.js');

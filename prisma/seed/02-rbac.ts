@@ -24,6 +24,11 @@ const PERMISSIONS = [
   'customer.read', 'customer.write',
   'catalog.read', 'catalog.write',
   'report.read',
+  // Staff records. Split three ways on purpose: reading the register is an
+  // everyday thing, editing it is not, and the national ID / bank account /
+  // wage are a third class again — a supervisor who needs to know when a
+  // technician started must not thereby see what everyone is paid.
+  'employee.read', 'employee.write', 'employee.sensitive',
   'admin.users', 'admin.config', 'admin.forms',
 ];
 
@@ -43,6 +48,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'workorder.read', 'customer.read', 'catalog.read', 'report.read',
   ],
   SUPERVISOR: [
+    // Sees who works here and when they started; not what they earn.
+    'employee.read',
     'job.read', 'job.update',
     'quota.read', 'dispatch.read', 'dispatch.assign',
     'workorder.read', 'workorder.approve',
@@ -51,7 +58,12 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'customer.read', 'catalog.read', 'report.read',
   ],
   TECHNICIAN: ['job.read', 'workorder.read', 'workorder.submit', 'customer.read', 'catalog.read'],
-  ACCOUNTING: ['job.read', 'charge.read', 'quotation.read', 'customer.read', 'report.read'],
+  // Accounting pays people, so it is the one non-admin role that needs the
+  // bank account and the wage.
+  ACCOUNTING: [
+    'job.read', 'charge.read', 'quotation.read', 'customer.read', 'report.read',
+    'employee.read', 'employee.sensitive',
+  ],
   CUSTOMER: ['job.read', 'workorder.read', 'quotation.read'],
 };
 
