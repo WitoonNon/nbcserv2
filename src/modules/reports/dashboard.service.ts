@@ -1,6 +1,6 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
-import { Prisma } from '@/generated/prisma';
+import { query, sql } from '@/lib/db/sql';
 import type { ServiceCategory, JobStatus } from '@/generated/prisma';
 
 /**
@@ -77,9 +77,8 @@ const STATUS_TH: Partial<Record<JobStatus, string>> = {
  * owner is looking at.
  */
 export async function jobsByMonth(months = 12): Promise<MonthPoint[]> {
-  const rows = await prisma.$queryRaw<
-    { bucket: Date; category: ServiceCategory; jobs: bigint }[]
-  >(Prisma.sql`
+  const rows = await query<{ bucket: Date; category: ServiceCategory; jobs: number }>(
+    sql`
     SELECT date_trunc('month', "createdAt" AT TIME ZONE 'Asia/Bangkok') AS bucket,
            "category",
            COUNT(*) AS jobs
@@ -88,7 +87,9 @@ export async function jobsByMonth(months = 12): Promise<MonthPoint[]> {
                           - MAKE_INTERVAL(months => ${months - 1})
        AND "status" <> 'CANCELLED'
      GROUP BY 1, 2
-  `);
+  `,
+    { name: 'jobsByMonth' },
+  );
 
   // Months with no work still have to appear, or the axis silently closes the
   // gap and a quiet season reads as a busy one.
@@ -106,7 +107,7 @@ export async function jobsByMonth(months = 12): Promise<MonthPoint[]> {
   for (const r of rows) {
     const d = r.bucket;
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    found.set(`${key}|${r.category}`, Number(r.jobs));
+    found.set(`${key}|${r.category}`, r.jobs);
   }
 
   const categories: ServiceCategory[] = ['CLEANING_PM', 'REPAIR', 'INSPECTION_REPAIR', 'INSTALLATION'];
@@ -154,9 +155,8 @@ export async function jobStatusMix(): Promise<StatusSlice[]> {
  * quiet day rather than a day nobody can book.
  */
 export async function upcomingLoad(days = 14): Promise<LoadPoint[]> {
-  const rows = await prisma.$queryRaw<
-    { quotaDate: Date; used: bigint | null; capacity: bigint | null }[]
-  >(Prisma.sql`
+  const rows = await query<{ quotaDate: Date; used: number | null; capacity: number | null }>(
+    sql`
     SELECT "quotaDate",
            SUM("usedJobs")     AS used,
            SUM("capacityJobs") AS capacity
@@ -166,7 +166,9 @@ export async function upcomingLoad(days = 14): Promise<LoadPoint[]> {
        AND "status" IN ('OPEN', 'FULL')
      GROUP BY 1
      ORDER BY 1
-  `);
+  `,
+    { name: 'upcomingLoad' },
+  );
 
   return rows.map((r) => {
     const d = r.quotaDate;
@@ -174,8 +176,9 @@ export async function upcomingLoad(days = 14): Promise<LoadPoint[]> {
       key: d.toISOString().slice(0, 10),
       day: `${TH_DOW[d.getUTCDay()]}${d.getUTCDate()}`,
       dayFull: `${TH_DOW[d.getUTCDay()]} ${d.getUTCDate()} ${TH_MONTH[d.getUTCMonth()]}`,
-      booked: Number(r.used ?? 0),
-      capacity: r.capacity === null ? null : Number(r.capacity),
+      // SUM over no rows is NULL, not zero.
+      booked: r.used ?? 0,
+      capacity: r.capacity,
     };
   });
 }
