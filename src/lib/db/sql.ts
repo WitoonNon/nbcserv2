@@ -1,6 +1,14 @@
-import 'server-only';
 import { Prisma } from '@/generated/prisma';
 import { prisma } from './index';
+
+// Deliberately NOT `import 'server-only'`, unlike most modules under src/lib.
+//
+// `server-only` is resolved by the Next bundler, not installed as a package, so
+// anything importing it cannot be loaded by `tsx` — which is what runs the
+// seed. This module sits under lib/db next to the client itself, and that layer
+// is used by seeds and maintenance scripts on purpose; db/index.ts omits it for
+// the same reason. Adding it here broke `prisma db seed`, because the seed
+// imports quota.service for materialiseQuota and that now reaches this file.
 
 /**
  * Raw SQL, made safe to reach for.

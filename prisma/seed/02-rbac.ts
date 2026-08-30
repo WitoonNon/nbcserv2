@@ -58,11 +58,18 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'customer.read', 'catalog.read', 'report.read',
   ],
   TECHNICIAN: ['job.read', 'workorder.read', 'workorder.submit', 'customer.read', 'catalog.read'],
-  // Accounting pays people, so it is the one non-admin role that needs the
-  // bank account and the wage.
+  // Reads the staff register but NOT the wage or the bank account.
+  //
+  // Accounting is the role that would normally need those, and it was given
+  // them when this was built. The client answered on 26 ส.ค. 2569 that salary
+  // and bank details are for the owner alone, so `employee.sensitive` now
+  // belongs to SUPER_ADMIN only. If payroll processing later needs it, add a
+  // dedicated role rather than widening this one — the point of splitting the
+  // permission three ways was that seeing who works here and seeing what they
+  // earn are different questions.
   ACCOUNTING: [
     'job.read', 'charge.read', 'quotation.read', 'customer.read', 'report.read',
-    'employee.read', 'employee.sensitive',
+    'employee.read',
   ],
   CUSTOMER: ['job.read', 'workorder.read', 'quotation.read'],
 };
@@ -88,15 +95,46 @@ export async function seedRbac() {
     await prisma.permission.upsert({ where: { code }, create: { code }, update: {} });
   }
 
+  // Grants are made to match the list exactly — including taking away what is
+  // no longer on it.
+  //
+  // This used to only add. Removing a permission from ROLE_PERMISSIONS
+  // therefore did nothing at all to a database that already had it: the code
+  // said one thing and every existing deployment kept doing another, with no
+  // error anywhere. It was found when `employee.sensitive` was taken off
+  // ACCOUNTING — the client had asked that salary and bank details be the
+  // owner's alone — and the role still had it after a reseed.
+  //
+  // A permission list that cannot revoke is not a permission list.
   for (const [roleCode, perms] of Object.entries(ROLE_PERMISSIONS)) {
     const role = await prisma.role.findUniqueOrThrow({ where: { code: roleCode } });
-    for (const permCode of perms) {
-      const perm = await prisma.permission.findUniqueOrThrow({ where: { code: permCode } });
+
+    const wanted = await prisma.permission.findMany({
+      where: { code: { in: perms } },
+      select: { id: true, code: true },
+    });
+    if (wanted.length !== perms.length) {
+      const found = new Set(wanted.map((p) => p.code));
+      throw new Error(
+        `Unknown permission(s) for ${roleCode}: ${perms.filter((c) => !found.has(c)).join(', ')} — add them to PERMISSIONS`,
+      );
+    }
+
+    for (const perm of wanted) {
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
         create: { roleId: role.id, permissionId: perm.id },
         update: {},
       });
+    }
+
+    // Guarded by roleId: an unset filter in Prisma matches every row, and this
+    // one would empty the whole permission table.
+    const removed = await prisma.rolePermission.deleteMany({
+      where: { roleId: role.id, permissionId: { notIn: wanted.map((p) => p.id) } },
+    });
+    if (removed.count > 0) {
+      console.log(`  rbac: revoked ${removed.count} permission(s) from ${roleCode}`);
     }
   }
 

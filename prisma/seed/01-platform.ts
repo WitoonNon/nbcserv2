@@ -172,6 +172,79 @@ const CONFIG: {
       'เพดานงานต่อวันคำนวณจากทีมช่างที่มีในระบบ ยังไม่ได้เทียบกับปริมาณงานจริงของบริษัท — ควรตรวจอัตราการใช้โควตาหลังใช้งานจริง 1 เดือนแล้วปรับ',
     isAssumption: true,
   },
+
+  // --- Timeclock: where "at the office" is ------------------------------
+  //
+  // Answered by the client on 26 ส.ค. 2569: 74/1 หมู่ 3 ต.ละหาร อ.บางบัวทอง
+  // นนทบุรี 11110, with a printed QR mounted permanently (no screen variant).
+  //
+  // The client gave an address, not a coordinate, and an address geocodes to
+  // somewhere within tens of metres at best. This value decides whether a
+  // scan counts as being at work, which decides whether somebody is paid —
+  // so it is seeded from the subdistrict centroid, flagged as an assumption,
+  // and MUST be replaced by standing at the mounting point and reading the
+  // coordinate off a phone. The radius is deliberately generous until then.
+  {
+    key: 'office.location.lat',
+    value: 13.968264,
+    description:
+      'ละติจูดจุดสแกนเข้างาน — ค่าประมาณจากศูนย์กลางตำบลละหาร ยังไม่ใช่พิกัดจริงของออฟฟิศ ต้องไปยืนที่จุดติด QR แล้วอ่านพิกัดจากมือถือมาแทน',
+    isAssumption: true,
+  },
+  {
+    key: 'office.location.lng',
+    value: 100.404581,
+    description:
+      'ลองจิจูดจุดสแกนเข้างาน — ค่าประมาณ ต้องแทนด้วยพิกัดจริงเช่นเดียวกับ office.location.lat',
+    isAssumption: true,
+  },
+  {
+    key: 'office.location.radiusMetres',
+    value: 300,
+    description:
+      'รัศมีที่ยอมรับว่าอยู่ที่ออฟฟิศ — ตั้งกว้างไว้ 300 ม. เพราะพิกัดยังเป็นค่าประมาณ เมื่อได้พิกัดจริงควรลดเหลือ 50–100 ม. กว้างเกินไปคือสแกนจากร้านข้างๆ ได้ แคบเกินไปคือพนักงานสแกนไม่ผ่านตอน GPS เพี้ยน',
+    isAssumption: true,
+  },
+  {
+    key: 'office.address',
+    value: '74/1 หมู่ 3 ต.ละหาร อ.บางบัวทอง จ.นนทบุรี 11110',
+    description:
+      'ที่ตั้งจุดสแกนเข้างาน ตามที่ลูกค้าแจ้ง 26 ส.ค. 2569 — ไม่ตรงกับที่อยู่บนหัวใบงาน (105/26 หมู่ 2) ซึ่งเป็นที่อยู่จดทะเบียน ยังไม่ได้ยืนยันว่าอันไหนคือจุดสแกนจริง',
+    isAssumption: true,
+  },
+
+  // --- Leave policy -----------------------------------------------------
+  //
+  // These are the CLIENT'S stated policy, given on 26 ส.ค. 2569 and confirmed
+  // when the discrepancy below was put to them.
+  //
+  // Recorded plainly because they sit under the figures in พ.ร.บ.คุ้มครองแรงงาน
+  // 2541: ม.57 pays sick leave up to 30 working days a year (not 15), ม.34 and
+  // ม.57/1 give 3 paid days of ลากิจธุระจำเป็น (not none), and neither section
+  // distinguishes monthly-paid staff from daily-paid. They are config rather
+  // than constants precisely so the company can raise them without a developer
+  // if it revisits the decision.
+  {
+    key: 'leave.sick.paidDaysPerYear',
+    value: 15,
+    description:
+      'ลาป่วยที่ได้รับค่าจ้าง 15 วัน/ปี ตามที่ลูกค้ากำหนด 26 ส.ค. 2569 — กฎหมายแรงงาน ม.57 กำหนดไม่เกิน 30 วันทำงาน/ปี ค่านี้จึงต่ำกว่าเกณฑ์กฎหมาย ลูกค้ารับทราบและยืนยันแล้ว',
+    isAssumption: true,
+  },
+  {
+    key: 'leave.sick.monthlyStaffOnly',
+    value: true,
+    description:
+      'ลาป่วยได้รับค่าจ้างเฉพาะพนักงานรายเดือน ตามที่ลูกค้ากำหนด — กฎหมายไม่ได้แยกรายวัน/รายเดือน ลูกค้ารับทราบและยืนยันแล้ว',
+    isAssumption: true,
+  },
+  {
+    key: 'leave.personal.paidDaysPerYear',
+    value: 0,
+    description:
+      'ลากิจไม่ได้รับค่าจ้าง ตามที่ลูกค้ากำหนด 26 ส.ค. 2569 — กฎหมายแรงงาน ม.34/ม.57/1 กำหนดลากิจธุระจำเป็นที่ได้รับค่าจ้าง 3 วันทำงาน/ปี ลูกค้ารับทราบและยืนยันแล้ว',
+    isAssumption: true,
+  },
 ];
 
 const FLAGS = [
