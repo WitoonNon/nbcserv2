@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { requirePermission, can } from '@/lib/auth/guard';
 import { getEmployee, employeeAccessLog } from '@/modules/hr/employee.service';
 import { SensitiveReveal } from '@/components/hr/SensitiveReveal';
+import { WageHistory } from '@/components/hr/WageHistory';
+import { wageHistory } from '@/modules/hr/wage.service';
 import {
   EMPLOYMENT_TYPE_LABEL,
   EMPLOYEE_STATUS_LABEL,
@@ -44,8 +46,14 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   if (!employee) notFound();
 
   const maySeeSensitive = can(user, 'employee.sensitive');
-  // The trail is only meaningful to someone who could be in it.
-  const log = maySeeSensitive ? await employeeAccessLog(id).catch(() => []) : [];
+  // Both of these carry wages, so they are fetched only for a reader who is
+  // allowed to see one — not fetched and then hidden in the markup.
+  const [log, wages] = maySeeSensitive
+    ? await Promise.all([
+        employeeAccessLog(id).catch(() => []),
+        wageHistory(id).catch(() => []),
+      ])
+    : [[], []];
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -147,6 +155,15 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             เลขบัตรประชาชน เลขบัญชีธนาคาร และค่าแรง — บัญชีของคุณไม่มีสิทธิ์เปิดดูส่วนนี้
           </p>
         </div>
+      )}
+
+      {maySeeSensitive && (
+        <WageHistory
+          employeeId={employee.id}
+          history={wages}
+          currentType={employee.employmentType}
+          canEdit
+        />
       )}
 
       {maySeeSensitive && (

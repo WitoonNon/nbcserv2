@@ -88,9 +88,10 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user       User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  technician Technician?
-  accessLogs EmployeeAccessLog[]
+  user        User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  technician  Technician?
+  accessLogs  EmployeeAccessLog[]
+  wageChanges EmployeeWageChange[]
 
   @@index([status, isActive])
   @@index([lastNameTh, firstNameTh])
@@ -119,4 +120,51 @@ model EmployeeAccessLog {
   @@index([employeeId, at])
   @@index([actorId, at])
   @@map("employee_access_logs")
+}
+
+/// Every wage this person has been on, and from when.
+///
+/// `Employee.wageRate` is a single mutable column, which is fine for "what do
+/// we pay them now" and wrong for everything else. Raise somebody on 15
+/// September, then recalculate August's payroll on the 20th, and the run uses
+/// the new rate — the wrong money, with nothing on screen to suggest it.
+///
+/// So the rate that applied during a period has to be a fact that survives the
+/// next raise. This table is the source of truth for that; `Employee.wageRate`
+/// stays as a denormalised "current" so the common read needs no join, and the
+/// service writes both together.
+///
+/// The client asked for this as *"หมายเหตุ กรณีปรับค่าแรง"* — a notes field.
+/// A single note would be overwritten by the next adjustment, which is exactly
+/// the history they were asking to keep.
+model EmployeeWageChange {
+  id         String @id @default(cuid())
+  employeeId String
+
+  /// The wage applies from this date onward. Date, not timestamp: payroll
+  /// periods are calendar days and a mid-day boundary has no meaning here.
+  effectiveFrom DateTime @db.Date
+
+  wageRate       Decimal        @db.Decimal(12, 2)
+  employmentType EmploymentType
+  /// What it was before — kept so the row reads on its own without having to
+  /// find and subtract the previous one.
+  previousRate   Decimal?       @db.Decimal(12, 2)
+
+  /// "ปรับตามผลงานประจำปี", "ผ่านทดลองงาน" — the client's หมายเหตุ.
+  reason String?
+
+  /// Who recorded it. Name is copied rather than joined so the trail still
+  /// reads after an account is deleted.
+  recordedById   String
+  recordedByName String
+  createdAt      DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  /// One rate per start date per person — a second row for the same day makes
+  /// "what were they on that day" ambiguous, and payroll cannot be ambiguous.
+  @@unique([employeeId, effectiveFrom])
+  @@index([employeeId, effectiveFrom])
+  @@map("employee_wage_changes")
 }
