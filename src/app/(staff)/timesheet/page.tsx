@@ -3,6 +3,11 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guard';
 import { getScanPointPolicy, pendingReviews } from '@/modules/hr/timeclock.service';
 import { ReviewPunch } from '@/components/hr/ReviewPunch';
+import { DecideLeave, DecideOvertime } from '@/components/hr/DecideRequest';
+import { pendingOvertime } from '@/modules/hr/overtime.service';
+import { pendingLeave } from '@/modules/hr/leave.service';
+import { LEGAL_MINIMUM_MULTIPLIER, OVERTIME_LABEL_TH } from '@/modules/hr/payroll-rules';
+import { LEAVE_LABEL_TH } from '@/modules/hr/leave-rules';
 import { formatThaiDate } from '@/lib/date/buddhist';
 
 export const dynamic = 'force-dynamic';
@@ -28,9 +33,11 @@ function time(at: Date): string {
 export default async function TimesheetPage() {
   await requirePermission('admin.config', '/timesheet');
 
-  const [queue, policy, todayEntries] = await Promise.all([
+  const [queue, policy, otQueue, leaveQueue, todayEntries] = await Promise.all([
     pendingReviews(),
     getScanPointPolicy(),
+    pendingOvertime(),
+    pendingLeave(),
     prisma.timeClockEntry.findMany({
       where: {
         occurredAt: {
@@ -115,6 +122,68 @@ export default async function TimesheetPage() {
       </section>
 
       <section>
+        <h2 className="text-lg">คำขอโอที {otQueue.length > 0 && `(${otQueue.length})`}</h2>
+        {otQueue.length === 0 ? (
+          <div className="card p-5 text-center text-sm text-[var(--color-muted)] mt-2">
+            ไม่มีคำขอโอทีรอพิจารณา
+          </div>
+        ) : (
+          <ul className="space-y-2 mt-2">
+            {otQueue.map((request) => (
+              <li key={request.id} className="card p-3 space-y-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-semibold">
+                    {request.employee.firstNameTh} {request.employee.lastNameTh}
+                  </span>
+                  <span className="text-sm tabular-nums">
+                    {formatThaiDate(request.workDate)} · {Number(request.hours)} ชม.
+                  </span>
+                </div>
+                <p className="text-[13px]">
+                  {OVERTIME_LABEL_TH[request.kind]} — {request.reason}
+                </p>
+                <DecideOvertime
+                  requestId={request.id}
+                  legalMinimum={LEGAL_MINIMUM_MULTIPLIER[request.kind]}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-lg">คำขอลา {leaveQueue.length > 0 && `(${leaveQueue.length})`}</h2>
+        {leaveQueue.length === 0 ? (
+          <div className="card p-5 text-center text-sm text-[var(--color-muted)] mt-2">
+            ไม่มีคำขอลารอพิจารณา
+          </div>
+        ) : (
+          <ul className="space-y-2 mt-2">
+            {leaveQueue.map((request) => (
+              <li key={request.id} className="card p-3 space-y-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-semibold">
+                    {request.employee.firstNameTh} {request.employee.lastNameTh}
+                  </span>
+                  <span className="text-sm tabular-nums">
+                    {formatThaiDate(request.fromDate)} – {formatThaiDate(request.toDate)} ·{' '}
+                    {Number(request.totalDays)} วัน
+                  </span>
+                </div>
+                <p className="text-[13px]">
+                  {LEAVE_LABEL_TH[request.type]} — {request.reason}
+                </p>
+                {/* The paid/unpaid split is decided at approval, not now:
+                    somebody else's request may take the last paid day first. */}
+                <DecideLeave requestId={request.id} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
         <h2 className="text-lg">การลงเวลาวันนี้</h2>
         {todayEntries.length === 0 ? (
           <div className="card p-5 text-center text-sm text-[var(--color-muted)] mt-2">
@@ -156,8 +225,11 @@ export default async function TimesheetPage() {
       </section>
 
       <p className="text-[12px] text-[var(--color-muted)]">
-        การคำนวณชั่วโมงทำงาน โอที และเงินเดือน อยู่ระหว่างพัฒนา —
-        หน้านี้บันทึกและตรวจสอบการลงเวลาเท่านั้น
+        โอทีและวันลาที่อนุมัติจากหน้านี้จะถูกนำไปคำนวณที่{' '}
+        <Link href="/payroll" className="underline text-[var(--color-brand-blue-600)]">
+          หน้าเงินเดือน
+        </Link>{' '}
+        · ยังไม่มีหน้าให้พนักงานยื่นคำขอเอง ตอนนี้ออฟฟิศเป็นคนบันทึกให้
       </p>
     </div>
   );

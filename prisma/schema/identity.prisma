@@ -38,6 +38,9 @@ model User {
   assignmentsMade  JobAssignment[]    @relation("AssignedBy")
   workOrdersSubmit WorkOrder[]        @relation("WorkOrderSubmittedBy")
   timeClockReviews TimeClockEntry[]   @relation("TimeClockReviewedBy")
+  overtimeDecided  OvertimeRequest[]  @relation("OvertimeDecidedBy")
+  leaveDecided     LeaveRequest[]     @relation("LeaveDecidedBy")
+  payrollClosed    PayrollPeriod[]    @relation("PayrollClosedBy")
   workOrdersReview WorkOrder[]        @relation("WorkOrderApprovedBy")
   chargesCreated   JobCharge[]
   quotaOverrides   QuotaOverrideLog[]

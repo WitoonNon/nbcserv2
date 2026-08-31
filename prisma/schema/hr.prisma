@@ -88,11 +88,14 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user        User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
-  technician  Technician?
-  accessLogs  EmployeeAccessLog[]
-  wageChanges EmployeeWageChange[]
-  timeClock   TimeClockEntry[]
+  user         User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  technician   Technician?
+  accessLogs   EmployeeAccessLog[]
+  wageChanges  EmployeeWageChange[]
+  timeClock    TimeClockEntry[]
+  overtime     OvertimeRequest[]
+  leave        LeaveRequest[]
+  payrollLines PayrollLine[]
 
   @@index([status, isActive])
   @@index([lastNameTh, firstNameTh])
@@ -241,4 +244,191 @@ model TimeClockEntry {
   /// The supervisor's queue.
   @@index([needsReview, occurredAt])
   @@map("time_clock_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Overtime, leave and payroll — งานเพิ่ม 10,000
+//
+// Three rules from the client that the shapes below exist to hold:
+//
+//   1. Overtime is REQUESTED and APPROVED before it is paid. The approval
+//      chain is borrowed from the work order: submitted, approved or returned
+//      with a reason, and never editable once approved.
+//   2. Overtime rates may not fall below the statutory multipliers. The
+//      multiplier is stored per line so a payslip can be re-read years later
+//      without depending on today's configuration.
+//   3. A closed payroll period LOCKS. A figure that can be quietly amended
+//      after the money has gone out is a figure nobody can audit.
+// ---------------------------------------------------------------------------
+
+/// Shared by overtime and leave: both are somebody asking and somebody
+/// deciding, and both need the same three answers.
+enum HrRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  /// Withdrawn by the person who asked, before anyone decided.
+  CANCELLED
+}
+
+enum OvertimeKind {
+  /// เกินเวลาทำงานปกติในวันทำงาน — ม.61, ขั้นต่ำ 1.5 เท่า
+  WORKDAY_OT
+  /// ทำงานในวันหยุด — ม.62, ขั้นต่ำ 2 เท่า
+  HOLIDAY_WORK
+  /// เกินเวลาทำงานปกติในวันหยุด — ม.63, ขั้นต่ำ 3 เท่า
+  HOLIDAY_OT
+}
+
+enum LeaveType {
+  SICK // ลาป่วย
+  PERSONAL // ลากิจ
+  ANNUAL // ลาพักร้อน
+  UNPAID // ลาไม่รับค่าจ้าง
+}
+
+model OvertimeRequest {
+  id         String          @id @default(cuid())
+  employeeId String
+  workDate   DateTime        @db.Date
+  kind       OvertimeKind
+  hours      Decimal         @db.Decimal(5, 2)
+  reason     String
+  status     HrRequestStatus @default(PENDING)
+
+  /// Frozen at approval, not read from configuration at payroll time. A
+  /// payslip reissued in two years has to show the rate that was actually
+  /// paid, and the configured rate may have moved since.
+  approvedMultiplier Decimal? @db.Decimal(4, 2)
+
+  decidedById  String?
+  decidedAt    DateTime?
+  /// Why it was refused. Required to reject — "no" without a reason is not a
+  /// decision anybody can act on.
+  decisionNote String?
+
+  /// Set when a payroll run has paid this. Blocks a second payment and blocks
+  /// editing after the fact.
+  paidInPeriodId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee  Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  decidedBy User?          @relation("OvertimeDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  period    PayrollPeriod? @relation(fields: [paidInPeriodId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, workDate])
+  @@index([status, workDate])
+  @@map("overtime_requests")
+}
+
+model LeaveRequest {
+  id         String          @id @default(cuid())
+  employeeId String
+  type       LeaveType
+  fromDate   DateTime        @db.Date
+  toDate     DateTime        @db.Date
+  reason     String
+  status     HrRequestStatus @default(PENDING)
+
+  /// Split at approval and frozen. The entitlement is consumed as it is
+  /// granted, so two requests decided on the same day cannot both be paid out
+  /// of the last remaining day.
+  totalDays  Decimal @db.Decimal(5, 2)
+  paidDays   Decimal @default(0) @db.Decimal(5, 2)
+  unpaidDays Decimal @default(0) @db.Decimal(5, 2)
+
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+
+  countedInPeriodId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee  Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  decidedBy User?          @relation("LeaveDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  period    PayrollPeriod? @relation(fields: [countedInPeriodId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, fromDate])
+  @@index([status, fromDate])
+  @@map("leave_requests")
+}
+
+enum PayrollPeriodStatus {
+  DRAFT
+  /// Closed and locked. Payslips may only be issued from here.
+  CLOSED
+}
+
+model PayrollPeriod {
+  id     String              @id @default(cuid())
+  /// "2569-09". One period per month; unique so a run cannot be duplicated.
+  code   String              @unique
+  from   DateTime            @db.Date
+  to     DateTime            @db.Date
+  status PayrollPeriodStatus @default(DRAFT)
+
+  closedById String?
+  closedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  closedBy User?             @relation("PayrollClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  lines    PayrollLine[]
+  overtime OvertimeRequest[]
+  leave    LeaveRequest[]
+
+  @@index([status, from])
+  @@map("payroll_periods")
+}
+
+model PayrollLine {
+  id         String @id @default(cuid())
+  periodId   String
+  employeeId String
+
+  /// Snapshotted at calculation. The wage record could be corrected later,
+  /// and a payslip has to keep saying what was actually paid.
+  wageRate       Decimal        @db.Decimal(12, 2)
+  employmentType EmploymentType
+
+  daysWorked      Decimal @default(0) @db.Decimal(5, 2)
+  paidLeaveDays   Decimal @default(0) @db.Decimal(5, 2)
+  unpaidLeaveDays Decimal @default(0) @db.Decimal(5, 2)
+  overtimeHours   Decimal @default(0) @db.Decimal(6, 2)
+
+  /// All amounts in satang, as integers. Money computed in floating-point
+  /// baht drifts across a month of lines.
+  baseSatang       Int @default(0)
+  overtimeSatang   Int @default(0)
+  additionsSatang  Int @default(0)
+  deductionsSatang Int @default(0)
+  netSatang        Int @default(0)
+
+  /// [{ label, amountSatang }] — what the office added or took off by hand.
+  additions  Json?
+  deductions Json?
+
+  /// True when an overtime line had to be raised to the statutory minimum.
+  /// Printed on the payslip rather than silently corrected.
+  raisedToLegalMinimum Boolean @default(false)
+
+  /// Why this person could not be calculated — no wage on record, most often.
+  /// A line that exists and explains itself beats a person quietly missing
+  /// from the run.
+  blockedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([periodId, employeeId])
+  @@index([periodId])
+  @@map("payroll_lines")
 }
