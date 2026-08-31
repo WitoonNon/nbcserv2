@@ -92,6 +92,7 @@ model Employee {
   technician  Technician?
   accessLogs  EmployeeAccessLog[]
   wageChanges EmployeeWageChange[]
+  timeClock   TimeClockEntry[]
 
   @@index([status, isActive])
   @@index([lastNameTh, firstNameTh])
@@ -167,4 +168,77 @@ model EmployeeWageChange {
   @@unique([employeeId, effectiveFrom])
   @@index([employeeId, effectiveFrom])
   @@map("employee_wage_changes")
+}
+
+// ---------------------------------------------------------------------------
+// Time clock — ลงเวลาเข้า-ออก
+//
+// The client's rule, agreed 26 ส.ค.: a QR code printed and fixed to the wall,
+// with the location check as the actual anti-fraud measure. A printed code is
+// photographed and shared within the first week; coordinates are what tie a
+// punch to a place.
+//
+// The corollary matters as much: a location check NEVER refuses a punch. A
+// phone with location off, an old handset, a basement car park — none of that
+// is the employee's fault, and an employee who cannot clock in does not get
+// paid. Every punch is recorded; a doubtful one is flagged for a supervisor.
+// ---------------------------------------------------------------------------
+
+enum TimeClockKind {
+  IN
+  OUT
+}
+
+/// What the location check concluded. Mirrors GeofenceVerdict in
+/// src/modules/hr/geofence.ts, which is where the rule is written and tested.
+enum GeofenceVerdict {
+  INSIDE
+  OUTSIDE
+  /// The phone reported no usable position.
+  NO_FIX
+  /// Nominally inside, but the phone's own margin of error was wider than the
+  /// fence — so "inside" carried no information.
+  UNRELIABLE
+}
+
+model TimeClockEntry {
+  id         String        @id @default(cuid())
+  employeeId String
+  kind       TimeClockKind
+
+  /// Server time, deliberately. Elsewhere in this system a client timestamp is
+  /// accepted because offline it is the only record of the real moment — but
+  /// this one decides what somebody is paid, and a device clock the employee
+  /// controls must not be the authority on that.
+  occurredAt DateTime @default(now())
+
+  /// Which code was scanned, and which kind it was.
+  scanPointId String
+  tokenKind   String // STATIC | ROTATING
+
+  lat            Float?
+  lng            Float?
+  accuracyMetres Float?
+  geofence       GeofenceVerdict
+  /// Distance from the scan point. Null when there was no fix to measure.
+  distanceMetres Int?
+
+  /// Set for anything a supervisor should look at. Cleared by reviewing it,
+  /// never by the employee.
+  needsReview  Boolean   @default(false)
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  deviceInfo String?
+  createdAt  DateTime @default(now())
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewedBy User?    @relation("TimeClockReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  /// The main read: one person's day, in order.
+  @@index([employeeId, occurredAt])
+  /// The supervisor's queue.
+  @@index([needsReview, occurredAt])
+  @@map("time_clock_entries")
 }

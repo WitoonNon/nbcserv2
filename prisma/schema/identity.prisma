@@ -37,6 +37,7 @@ model User {
   notes            JobNote[]
   assignmentsMade  JobAssignment[]    @relation("AssignedBy")
   workOrdersSubmit WorkOrder[]        @relation("WorkOrderSubmittedBy")
+  timeClockReviews TimeClockEntry[]   @relation("TimeClockReviewedBy")
   workOrdersReview WorkOrder[]        @relation("WorkOrderApprovedBy")
   chargesCreated   JobCharge[]
   quotaOverrides   QuotaOverrideLog[]
