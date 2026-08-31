@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth/session';
 import { after } from 'next/server';
 import { advanceFieldJob, FieldWorkError } from '@/modules/jobs/field-work.service';
 import { notifyJobSafely } from '@/modules/notifications/notify.service';
+import { recordPmVisit } from '@/modules/scheduling/pm.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,10 @@ export async function POST(req: Request) {
     return Number.isFinite(value) ? value : null;
   };
 
+  // The moment of the tap. Offline this is the only record of when the
+  // technician actually arrived — the request time could be hours later.
+  const occurredAt = form.get('occurredAt') ? new Date(String(form.get('occurredAt'))) : undefined;
+
   try {
     const result = await advanceFieldJob({
       jobId,
@@ -52,9 +57,7 @@ export async function POST(req: Request) {
       actorId: user.id,
       lat: asNumber('lat'),
       lng: asNumber('lng'),
-      // The moment of the tap. Offline this is the only record of when the
-      // technician actually arrived — the request time could be hours later.
-      occurredAt: form.get('occurredAt') ? new Date(String(form.get('occurredAt'))) : undefined,
+      occurredAt,
     });
 
     // Scheduled after the response, so the technician's button turns green at
@@ -64,6 +67,25 @@ export async function POST(req: Request) {
     if (result.notifyArrival) {
       after(async () => {
         await notifyJobSafely({ jobId, templateCode: 'TECH_ON_SITE' });
+      });
+    }
+
+    // Closing a PM visit is what moves those machines' cycle forward. Done
+    // after the response for the same reason as the message above, and it is
+    // a no-op for every other kind of job — recordPmVisit checks the category
+    // rather than making each caller remember the rule.
+    if (result.to === 'COMPLETED') {
+      after(async () => {
+        try {
+          // The cycle counts from when the work was done, which offline is
+          // not when we heard about it.
+          await recordPmVisit(jobId, occurredAt ?? new Date());
+        } catch {
+          // The visit happened whatever this does. A cycle that fails to roll
+          // forward means the machine is proposed again sooner than it needed
+          // to be, which is an annoyance; failing the technician's "ปิดงาน"
+          // over it would be worse.
+        }
       });
     }
 

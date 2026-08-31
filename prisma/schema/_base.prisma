@@ -131,6 +131,11 @@ enum CreatedVia {
   LINE
   PHONE
   ADMIN
+  /// Raised by the PM planner rather than by a person. Distinct from ADMIN
+  /// because a report on where work comes from would otherwise credit the
+  /// office for jobs nobody has asked for yet, and because an unconfirmed
+  /// proposal has to be tellable from a request a customer actually made.
+  SYSTEM
 }
 
 /// Why an inspection fee was not charged. NULL means the fee applied normally.

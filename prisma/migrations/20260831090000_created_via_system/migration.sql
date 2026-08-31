@@ -1,0 +1,11 @@
+-- Jobs raised by the PM planner rather than by a person.
+--
+-- Written by hand rather than generated: `prisma migrate diff` needs a live
+-- database to compare against, and this was authored while the development
+-- database was unreachable. The change is a single enum addition, which is why
+-- that was acceptable here — anything touching tables should be generated.
+--
+-- Adding an enum value is safe to replay and cannot fail on existing rows; no
+-- row references it yet. Postgres 12+ allows this inside a transaction as long
+-- as the new value is not USED in the same transaction, which it is not.
+ALTER TYPE "CreatedVia" ADD VALUE IF NOT EXISTS 'SYSTEM';
