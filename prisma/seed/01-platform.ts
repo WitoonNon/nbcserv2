@@ -178,31 +178,40 @@ const CONFIG: {
   // Answered by the client on 26 ส.ค. 2569: 74/1 หมู่ 3 ต.ละหาร อ.บางบัวทอง
   // นนทบุรี 11110, with a printed QR mounted permanently (no screen variant).
   //
-  // The client gave an address, not a coordinate, and an address geocodes to
-  // somewhere within tens of metres at best. This value decides whether a
-  // scan counts as being at work, which decides whether somebody is paid —
-  // so it is seeded from the subdistrict centroid, flagged as an assumption,
-  // and MUST be replaced by standing at the mounting point and reading the
-  // coordinate off a phone. The radius is deliberately generous until then.
+  // The client gave an address, not a coordinate. This value decides whether
+  // a scan counts as being at work, which decides whether somebody is paid,
+  // and it MUST be replaced by standing at the mounting point and reading the
+  // coordinate off a phone.
+  //
+  // ⚠️ The first seeded value — the ต.ละหาร subdistrict centroid, 13.968264 /
+  // 100.404581 — was measured on 31 ส.ค. to be 4.8 km from the addressed
+  // area. Against a 300 m fence that flags EVERY punch, which is worse than
+  // no check at all: a queue that is always full is a queue nobody reads.
+  //
+  // Replaced with the geocoded centre of หมู่ 3 ต.ละหาร (OpenStreetMap has no
+  // house numbers for this area, so this is the village, not the building).
+  // Still a guess — but a guess in the right kilometre — and the radius is
+  // widened to match its honest uncertainty rather than pretending to a
+  // precision it does not have.
   {
     key: 'office.location.lat',
-    value: 13.968264,
+    value: 13.9391592,
     description:
-      'ละติจูดจุดสแกนเข้างาน — ค่าประมาณจากศูนย์กลางตำบลละหาร ยังไม่ใช่พิกัดจริงของออฟฟิศ ต้องไปยืนที่จุดติด QR แล้วอ่านพิกัดจากมือถือมาแทน',
+      'ละติจูดจุดสแกนเข้างาน — ค่าประมาณระดับหมู่บ้าน (หมู่ 3 ต.ละหาร) ยังไม่ใช่พิกัดจริงของจุดติด QR ต้องไปยืนที่จุดนั้นแล้วอ่านพิกัดจากมือถือมาแทน',
     isAssumption: true,
   },
   {
     key: 'office.location.lng',
-    value: 100.404581,
+    value: 100.4379344,
     description:
       'ลองจิจูดจุดสแกนเข้างาน — ค่าประมาณ ต้องแทนด้วยพิกัดจริงเช่นเดียวกับ office.location.lat',
     isAssumption: true,
   },
   {
     key: 'office.location.radiusMetres',
-    value: 300,
+    value: 1500,
     description:
-      'รัศมีที่ยอมรับว่าอยู่ที่ออฟฟิศ — ตั้งกว้างไว้ 300 ม. เพราะพิกัดยังเป็นค่าประมาณ เมื่อได้พิกัดจริงควรลดเหลือ 50–100 ม. กว้างเกินไปคือสแกนจากร้านข้างๆ ได้ แคบเกินไปคือพนักงานสแกนไม่ผ่านตอน GPS เพี้ยน',
+      'รัศมีที่ยอมรับว่าอยู่ที่ออฟฟิศ — ตั้งไว้ 1,500 ม. ชั่วคราวเพราะพิกัดยังเป็นค่าประมาณระดับหมู่บ้าน กว้างขนาดนี้ยังกันการสแกนจากบ้านได้ แต่กันการสแกนจากร้านข้างๆ ไม่ได้ **เมื่อได้พิกัดจริงต้องลดเหลือ 50–100 ม. ทันที** ไม่งั้นการตรวจนี้แทบไม่มีความหมาย',
     isAssumption: true,
   },
   {

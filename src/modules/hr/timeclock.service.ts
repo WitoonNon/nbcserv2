@@ -62,14 +62,17 @@ export interface ScanPointPolicy {
 /**
  * The seeded fallback, matching prisma/seed/01-platform.ts.
  *
- * ⚠️ A guess from the centre of ต.ละหาร, not a reading taken at the scan
- * point, and 300 m is wide enough to cover the error. This value decides who
- * gets paid: it needs somebody standing where the code will hang, and the
- * radius then dropping to 50–100 m.
+ * ⚠️ The geocoded centre of หมู่ 3 ต.ละหาร — the village, not the building,
+ * because OpenStreetMap carries no house numbers there. The radius is wide to
+ * match that uncertainty honestly rather than imply a precision it lacks.
+ *
+ * This value decides who gets paid. It needs somebody standing where the code
+ * will hang, reading the coordinate off a phone, and the radius then dropping
+ * to 50–100 m.
  */
 const FALLBACK: ScanPointPolicy = {
-  office: { lat: 13.968264, lng: 100.404581 },
-  radiusMetres: 300,
+  office: { lat: 13.9391592, lng: 100.4379344 },
+  radiusMetres: 1500,
   isAssumption: true,
 };
 

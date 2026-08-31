@@ -32,6 +32,12 @@ export default async function SettingsPage() {
       meta: counts ? `${counts.quotaRules} กฎ` : null,
     },
     {
+      href: '/settings/timeclock',
+      title: 'จุดลงเวลาและรหัส QR',
+      desc: 'พิกัดที่ยอมรับสำหรับการลงเวลา รหัส QR สำหรับพิมพ์ติดผนัง และรหัสสำหรับแสดงบนจอ',
+      meta: null,
+    },
+    {
       href: '/settings/users',
       title: 'ผู้ใช้งานและสิทธิ์',
       desc: 'บัญชีพนักงาน บทบาท และสิทธิ์การเข้าถึงแต่ละหน้าจอ',
