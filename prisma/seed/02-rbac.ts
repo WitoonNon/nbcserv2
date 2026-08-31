@@ -29,6 +29,14 @@ const PERMISSIONS = [
   // wage are a third class again — a supervisor who needs to know when a
   // technician started must not thereby see what everyone is paid.
   'employee.read', 'employee.write', 'employee.sensitive',
+  // Attendance and requests. Split from admin.config so a supervisor can decide
+  // their own team's overtime without also holding pricing, quota and user
+  // administration — the quotation asks for the former and implies none of the
+  // latter. `.all` lifts the team restriction; see modules/hr/scope.ts.
+  'hr.approve', 'hr.approve.all',
+  // Payroll again as its own pair: what people are paid is the owner-only
+  // permission the client asked for on 26 ส.ค.
+  'payroll.read', 'payroll.run',
   'admin.users', 'admin.config', 'admin.forms',
 ];
 
@@ -40,6 +48,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'workorder.read', 'quotation.read', 'quotation.create',
     'charge.read', 'charge.create',
     'customer.read', 'customer.write', 'catalog.read', 'report.read',
+    // The office runs attendance for everybody. It still does not see payroll.
+    'employee.read', 'hr.approve', 'hr.approve.all',
   ],
   DISPATCHER: [
     'job.read', 'job.update',
@@ -56,6 +66,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'quotation.read', 'quotation.create', 'quotation.approve',
     'charge.read', 'charge.create',
     'customer.read', 'catalog.read', 'report.read',
+    // Decides overtime and leave for their OWN crew. Deliberately without
+    // 'hr.approve.all' — the queues are filtered in modules/hr/scope.ts, and
+    // the permission on its own is not the boundary.
+    'hr.approve',
   ],
   TECHNICIAN: ['job.read', 'workorder.read', 'workorder.submit', 'customer.read', 'catalog.read'],
   // Reads the staff register but NOT the wage or the bank account.

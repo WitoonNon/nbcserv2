@@ -2,22 +2,18 @@
 
 > เขียนไว้ตอนย้ายแชท อ่านไฟล์นี้ก่อนทำอะไรต่อ
 > รายละเอียดกติกาทั้งหมดอยู่ใน [`07-HANDOFF-2026-08-26.md`](07-HANDOFF-2026-08-26.md)
+> **เรื่องที่ยังไม่มีคำตอบ (DB · พิกัด · ม.62 · ภาษี) แยกไปอยู่ใน
+> [`09-OPEN-DECISIONS-2026-08-31.md`](09-OPEN-DECISIONS-2026-08-31.md)**
 
 ---
 
-## 🔴 อ่านก่อน: มีงานค้างใน working tree ที่ยังไม่ commit
+## ✅ งานที่เคยค้าง — commit แล้ว (อัปเดต 31 ส.ค.)
 
-**~4,000 บรรทัด** ของโอที · ลา · เงินเดือน อยู่ในเครื่องเฉย ๆ ยังไม่ commit
-(ผู้ใช้สั่งว่า *"ทำเสร็จยังไม่ต้อง Push"*)
+**~4,000 บรรทัด** ของโอที · ลา · เงินเดือน เคยค้างอยู่ใน working tree
+ตอนนี้อยู่ใน **`1341f90 feat(hr): overtime, leave and payroll`** แล้ว
+working tree สะอาด · **ยังไม่ push** ตามที่ผู้ใช้สั่ง (*"ทำเสร็จยังไม่ต้อง Push"*)
 
-```bash
-git status --short     # ดูว่ายังอยู่ครบไหม
-```
-
-ถ้ายังอยู่ **commit ไว้ก่อนเป็นอย่างแรก** — ไม่ต้อง push ก็ได้ แต่ commit ในเครื่อง
-ทำให้ของไม่หาย และย้อนได้ด้วย `git reset --soft HEAD~1` ถ้าไม่ชอบ
-
-ไฟล์ที่ยังไม่ commit:
+ไฟล์ที่อยู่ใน commit นั้น:
 
 ```
 prisma/schema/hr.prisma            (+ OvertimeRequest, LeaveRequest, PayrollPeriod, PayrollLine)
@@ -73,8 +69,9 @@ npx vitest run tests/hr.payroll-rules.test.ts tests/hr.leave-rules.test.ts \
 | ไฟล์ | จำนวน | ของฟีเจอร์ |
 |---|---|---|
 | `tests/scheduling.pm.test.ts` | 13 | นัด PM อัตโนมัติ (3.4) |
-| `tests/hr.timeclock.test.ts` | 17 | ลงเวลา QR+GPS |
-| `tests/hr.payroll.test.ts` | 24 | โอที · ลา · เงินเดือน |
+| `tests/hr.timeclock.test.ts` | 18 | ลงเวลา QR+GPS |
+| `tests/hr.payroll.test.ts` | 22 | โอที · ลา · เงินเดือน |
+| `tests/hr.self-service.test.ts` | 15 | พนักงานยื่นคำขอเอง (`/requests`) |
 
 ```bash
 npx prisma migrate deploy && npx vitest run
@@ -89,9 +86,30 @@ npx prisma migrate deploy && npx vitest run
 | `4ddc26c` | 3.4 นัด PM อัตโนมัติ | ✅ |
 | `714add4` | ลงเวลา QR+GPS — แกน | ✅ |
 | `916e51c` | ลงเวลา — หน้าจอ + แก้พิกัดที่ผิด 4.8 กม. | ✅ |
-| *(ยังไม่ commit)* | โอที · ลา · เงินเดือน | ❌ |
+| `1341f90` | โอที · ลา · เงินเดือน | ❌ ยังไม่ push |
+| *(ยังไม่ commit)* | หน้าให้พนักงานยื่นคำขอเอง — `/requests` | ❌ |
 
-push ไปทั้ง `origin` (nbcserv) และ `nbcserv2` แล้วทั้ง 3 commit
+push ไปทั้ง `origin` (nbcserv) และ `nbcserv2` แล้ว 3 commit แรก
+
+### หน้าให้พนักงานยื่นขอโอที/ลาเอง — `/requests`
+
+อยู่นอก staff layout เหมือน `/clock` เพราะคนที่ใช้จริงคือช่างบนมือถือ
+ต้องการแค่ล็อกอิน + มีแถวในทะเบียนพนักงาน ไม่ต้องมีสิทธิ์อะไรเลย
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `src/app/requests/page.tsx` | หน้าจอ — ยอดสิทธิ์ลาคงเหลือ · ฟอร์ม · ประวัติคำขอของตัวเอง |
+| `src/app/requests/actions.ts` | server action — ยื่น/ยกเลิก |
+| `src/components/hr/RequestForms.tsx` | ฟอร์ม + แท็บ + ปุ่มยกเลิก (client) |
+| `src/modules/hr/self-service.ts` | `currentEmployee()` — session → ทะเบียนพนักงาน |
+
+เพิ่มใน service เดิม: `cancelLeave` · `myLeaveRequests` · `leaveBalances` · `myOvertimeRequests`
+
+**กฎที่ห้ามพัง:** `employeeId` มาจาก session เท่านั้น ไม่เคยอ่านจากฟอร์ม
+ฟอร์มส่งแค่ `requestId` ไป จึงไม่มีช่องให้แก้ว่าเป็นคำขอของใคร
+และ service ยังเช็คเจ้าของซ้ำอีกชั้น (`cancelLeave` / `cancelOvertime` โยน 403)
+
+ทางเข้า: ลิงก์บนหน้า `/clock` (หน้าเดียวที่พนักงานทุกคนเปิดอยู่แล้ว)
 
 ---
 
@@ -127,6 +145,6 @@ push ไปทั้ง `origin` (nbcserv) และ `nbcserv2` แล้วท�
 
 **ถ้ายังไม่ได้:** งานที่เหลือเขียนได้แต่ตรวจไม่ได้ ตัวเลือกที่เหลือ
 
-- หน้าให้พนักงานยื่นขอโอที/ลาเอง (service พร้อมแล้ว)
+- ~~หน้าให้พนักงานยื่นขอโอที/ลาเอง~~ ✅ ทำแล้ว — `/requests` (ยังไม่ได้ทดสอบกับ DB)
 - สลิปเงินเดือน PDF (เครื่องมือพร้อมจาก 2.4 · ออกได้เฉพาะงวดที่ปิดแล้ว)
 - 3.2 รายงาน · 3.3 เชื่อมเว็บเดิม · 3.6 แอดมินแก้รูป (3.3/3.6 ผู้ใช้ยกให้อีกคนทำ)

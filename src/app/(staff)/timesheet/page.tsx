@@ -9,6 +9,7 @@ import { pendingLeave } from '@/modules/hr/leave.service';
 import { LEGAL_MINIMUM_MULTIPLIER, OVERTIME_LABEL_TH } from '@/modules/hr/payroll-rules';
 import { LEAVE_LABEL_TH } from '@/modules/hr/leave-rules';
 import { formatThaiDate } from '@/lib/date/buddhist';
+import { employeeScopeWhere, visibleEmployeeIds } from '@/modules/hr/scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,15 +32,22 @@ function time(at: Date): string {
  * a screen that always looks busy teaches people to stop reading it.
  */
 export default async function TimesheetPage() {
-  await requirePermission('admin.config', '/timesheet');
+  const user = await requirePermission('hr.approve', '/timesheet');
+
+  // ใบเสนอราคาข้อ 7 — a supervisor sees their own crew and nobody else's.
+  // The permission says they may decide; this says whose. Both queues and the
+  // day's list are filtered by it, and the server actions check it again.
+  const scope = await visibleEmployeeIds(user);
+  const scopeWhere = employeeScopeWhere(scope);
 
   const [queue, policy, otQueue, leaveQueue, todayEntries] = await Promise.all([
-    pendingReviews(),
+    pendingReviews(50, scope),
     getScanPointPolicy(),
-    pendingOvertime(),
-    pendingLeave(),
+    pendingOvertime(100, scope),
+    pendingLeave(100, scope),
     prisma.timeClockEntry.findMany({
       where: {
+        ...scopeWhere,
         occurredAt: {
           gte: new Date(new Date().setHours(0, 0, 0, 0)),
         },
@@ -229,7 +237,11 @@ export default async function TimesheetPage() {
         <Link href="/payroll" className="underline text-[var(--color-brand-blue-600)]">
           หน้าเงินเดือน
         </Link>{' '}
-        · ยังไม่มีหน้าให้พนักงานยื่นคำขอเอง ตอนนี้ออฟฟิศเป็นคนบันทึกให้
+        · พนักงานยื่นคำขอเองได้ที่{' '}
+        <Link href="/requests" className="underline text-[var(--color-brand-blue-600)]">
+          /requests
+        </Link>{' '}
+        (ลิงก์อยู่บนหน้าลงเวลาที่พนักงานสแกน QR เข้ามา)
       </p>
     </div>
   );

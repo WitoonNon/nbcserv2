@@ -4,10 +4,43 @@ import { revalidatePath } from 'next/cache';
 import { assertPermission, ForbiddenError } from '@/lib/auth/guard';
 import { approveOvertime, OvertimeError, rejectOvertime } from '@/modules/hr/overtime.service';
 import { approveLeave, LeaveError, rejectLeave } from '@/modules/hr/leave.service';
+import { inScope, visibleEmployeeIds } from '@/modules/hr/scope';
+import { prisma } from '@/lib/db';
 
 export interface DecisionState {
   error?: string;
   ok?: string;
+}
+
+/**
+ * The permission says you may decide; this says whose — ใบเสนอราคาข้อ 7.
+ *
+ * Checked here and not only on the page, because hiding a request from a
+ * queue is presentation. A supervisor who learns another team's request id
+ * must still be refused when they post it, and this is the place that does it.
+ */
+/** Whose request this is, so the scope can be checked before anything is written. */
+async function ownerOf(kind: 'overtime' | 'leave', requestId: string): Promise<string | null> {
+  const row =
+    kind === 'overtime'
+      ? await prisma.overtimeRequest.findUnique({
+          where: { id: requestId },
+          select: { employeeId: true },
+        })
+      : await prisma.leaveRequest.findUnique({
+          where: { id: requestId },
+          select: { employeeId: true },
+        });
+  return row?.employeeId ?? null;
+}
+
+async function assertMayDecide(employeeId: string) {
+  const actor = await assertPermission('hr.approve');
+  const scope = await visibleEmployeeIds(actor);
+  if (!inScope(scope, employeeId)) {
+    throw new ForbiddenError('ตัดสินคำขอของทีมอื่นไม่ได้');
+  }
+  return actor;
 }
 
 function friendly(e: unknown): DecisionState {
@@ -38,7 +71,9 @@ export async function decideOvertimeAction(
   if (!requestId) return { error: 'ไม่พบคำขอ' };
 
   try {
-    const actor = await assertPermission('admin.config');
+    const owner = await ownerOf('overtime', requestId);
+    if (!owner) return { error: 'ไม่พบคำขอ' };
+    const actor = await assertMayDecide(owner);
 
     if (decision === 'reject') {
       await rejectOvertime({ requestId, deciderId: actor.id, note });
@@ -76,7 +111,9 @@ export async function decideLeaveAction(
   if (!requestId) return { error: 'ไม่พบคำขอ' };
 
   try {
-    const actor = await assertPermission('admin.config');
+    const owner = await ownerOf('leave', requestId);
+    if (!owner) return { error: 'ไม่พบคำขอ' };
+    const actor = await assertMayDecide(owner);
 
     if (decision === 'reject') {
       await rejectLeave({ requestId, deciderId: actor.id, note });

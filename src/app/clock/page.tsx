@@ -56,8 +56,8 @@ export default async function ClockPage({
         <p className="text-sm text-[var(--color-muted)]">
           เปิดกล้องมือถือแล้วส่องที่รหัส QR ตรงจุดลงเวลา หน้านี้จะเปิดขึ้นเอง
         </p>
-        <Link href="/dashboard" className="text-sm text-[var(--color-brand-blue-600)] underline">
-          กลับหน้าหลัก
+        <Link href="/requests" className="text-sm text-[var(--color-brand-blue-600)] underline">
+          ขอโอที / ขอลา
         </Link>
       </div>,
     );
@@ -95,6 +95,15 @@ export default async function ClockPage({
           </ul>
         </div>
       )}
+
+      {/* The one screen every employee already opens, so it is where the
+          self-service page has to be reachable from — nobody is going to
+          type a URL in a doorway. */}
+      <p className="text-center">
+        <Link href="/requests" className="text-sm underline text-[var(--color-brand-blue-600)]">
+          ขอโอที / ขอลา
+        </Link>
+      </p>
     </div>,
   );
 }

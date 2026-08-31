@@ -45,7 +45,7 @@ export async function openPeriodAction(
   }
 
   try {
-    await assertPermission('admin.config');
+    await assertPermission('payroll.run');
     const { from, to } = monthRange(code);
     await openPeriod({ code, from, to });
 
@@ -64,7 +64,7 @@ export async function calculateAction(
   if (!periodId) return { error: 'ไม่พบงวด' };
 
   try {
-    await assertPermission('admin.config');
+    await assertPermission('payroll.run');
     const summary = await calculatePeriod(periodId);
 
     revalidatePath('/payroll');
@@ -94,7 +94,7 @@ export async function closePeriodAction(
   if (!periodId) return { error: 'ไม่พบงวด' };
 
   try {
-    const actor = await assertPermission('admin.config');
+    const actor = await assertPermission('payroll.run');
     await closePeriod({
       periodId,
       closedById: actor.id,

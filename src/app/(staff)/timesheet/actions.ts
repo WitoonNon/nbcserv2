@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { assertPermission, ForbiddenError } from '@/lib/auth/guard';
+import { inScope, visibleEmployeeIds } from '@/modules/hr/scope';
+import { prisma } from '@/lib/db';
 import { reviewEntry, TimeClockError } from '@/modules/hr/timeclock.service';
 
 export interface ReviewState {
@@ -25,7 +27,19 @@ export async function reviewEntryAction(
   if (!entryId) return { error: 'ไม่พบรายการ' };
 
   try {
-    const actor = await assertPermission('admin.config');
+    const actor = await assertPermission('hr.approve');
+
+    // Same rule as deciding a request: the permission says you may clear a
+    // flag, the scope says whose — ใบเสนอราคาข้อ 7.
+    const entry = await prisma.timeClockEntry.findUnique({
+      where: { id: entryId },
+      select: { employeeId: true },
+    });
+    if (!entry) return { error: 'ไม่พบรายการ' };
+    if (!inScope(await visibleEmployeeIds(actor), entry.employeeId)) {
+      throw new ForbiddenError('ตรวจการลงเวลาของทีมอื่นไม่ได้');
+    }
+
     await reviewEntry({ entryId, reviewerId: actor.id, note });
 
     revalidatePath('/timesheet');

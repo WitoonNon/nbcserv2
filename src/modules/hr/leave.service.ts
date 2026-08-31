@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import type { LeaveType } from '@/generated/prisma';
 import {
+  entitlementDays,
   LEAVE_POLICY_DEFAULTS,
   leaveDaysBetween,
   splitLeave,
@@ -262,9 +263,104 @@ export async function rejectLeave(params: {
   });
 }
 
-export async function pendingLeave(limit = 100) {
+/**
+ * Withdraw a leave request you made yourself, before anyone has decided.
+ *
+ * Mirrors cancelOvertime(), including the ownership check: `employeeId` comes
+ * from the session, never from the form, so the id in a submitted request is
+ * only ever the thing being cancelled — never whose it is.
+ *
+ * Cancelled, not deleted: a request that was made and withdrawn is part of
+ * the record of what happened.
+ */
+export async function cancelLeave(params: { requestId: string; employeeId: string }) {
+  const request = await prisma.leaveRequest.findUnique({
+    where: { id: params.requestId },
+    select: { employeeId: true, status: true },
+  });
+  if (!request) throw new LeaveError('ไม่พบคำขอลา', 404);
+  if (request.employeeId !== params.employeeId) {
+    throw new LeaveError('ยกเลิกคำขอของคนอื่นไม่ได้', 403);
+  }
+  if (request.status !== 'PENDING') {
+    throw new LeaveError('คำขอนี้ตัดสินไปแล้ว ยกเลิกเองไม่ได้', 409);
+  }
+
+  await prisma.leaveRequest.update({
+    where: { id: params.requestId },
+    data: { status: 'CANCELLED' },
+  });
+}
+
+/** One employee's own leave requests, newest first, every status. */
+export async function myLeaveRequests(employeeId: string, limit = 30) {
   return prisma.leaveRequest.findMany({
-    where: { status: 'PENDING' },
+    where: { employeeId },
+    orderBy: [{ fromDate: 'desc' }, { createdAt: 'desc' }],
+    take: limit,
+    select: {
+      id: true,
+      type: true,
+      fromDate: true,
+      toDate: true,
+      reason: true,
+      status: true,
+      totalDays: true,
+      paidDays: true,
+      unpaidDays: true,
+      decisionNote: true,
+      decidedAt: true,
+    },
+  });
+}
+
+export interface LeaveBalance {
+  type: LeaveType;
+  entitlementDays: number;
+  usedDays: number;
+  remainingDays: number;
+}
+
+/**
+ * What this employee has left, per type, for the calendar year of `on`.
+ *
+ * Shown before they ask rather than after they are told. Somebody deciding
+ * whether to take an unpaid day should be able to see that it will be unpaid
+ * while they still have the choice — the split at approval is not the moment
+ * to find out.
+ *
+ * Counts APPROVED requests only, which means a pending request is not held
+ * against the balance. That is deliberate and it is the honest reading: an
+ * undecided request has consumed nothing yet, and reserving against it would
+ * show a smaller balance than the employee actually has.
+ */
+export async function leaveBalances(employeeId: string, on = new Date()): Promise<LeaveBalance[]> {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { employmentType: true },
+  });
+  if (!employee) throw new LeaveError('ไม่พบทะเบียนพนักงาน', 404);
+
+  const policy = await getLeavePolicy();
+  const types: LeaveType[] = ['SICK', 'PERSONAL', 'ANNUAL'];
+
+  return Promise.all(
+    types.map(async (type) => {
+      const entitlement = entitlementDays(policy, type, employee.employmentType);
+      const used = await paidDaysUsed(employeeId, type, on);
+      return {
+        type,
+        entitlementDays: entitlement,
+        usedDays: used,
+        remainingDays: Math.max(0, entitlement - used),
+      };
+    }),
+  );
+}
+
+export async function pendingLeave(limit = 100, employeeIds: string[] | null = null) {
+  return prisma.leaveRequest.findMany({
+    where: { status: 'PENDING', ...(employeeIds === null ? {} : { employeeId: { in: employeeIds } }) },
     orderBy: { fromDate: 'asc' },
     take: limit,
     include: {

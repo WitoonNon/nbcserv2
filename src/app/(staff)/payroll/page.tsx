@@ -31,7 +31,7 @@ export default async function PayrollPage({
 }: {
   searchParams: Promise<{ period?: string }>;
 }) {
-  await requirePermission('admin.config', '/payroll');
+  await requirePermission('payroll.read', '/payroll');
   const { period: selectedId } = await searchParams;
 
   const periods = await listPeriods();

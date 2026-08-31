@@ -4,6 +4,12 @@ import { env } from '@/lib/env';
 import type { TimeClockKind } from '@/generated/prisma';
 import { checkGeofence, type Coordinates } from './geofence';
 import { verifyToken } from './timeclock-token';
+import {
+  dailyRows,
+  summariseAttendance,
+  type AttendanceSummary,
+  type Punch,
+} from './worktime';
 
 /**
  * Clocking in and out (งานเพิ่ม 10,000 — ลงเวลาเข้า-ออก).
@@ -229,10 +235,61 @@ export async function entriesForDay(employeeId: string, day: Date) {
   });
 }
 
+/**
+ * Attendance for a whole payroll run, in one query.
+ *
+ * Returns nothing for an employee with no punches at all rather than a zeroed
+ * summary — payroll has to tell "was here every day and the clock proves it"
+ * apart from "the clock was not in use yet", and a zero cannot say which.
+ */
+export async function attendanceInPeriod(
+  employeeIds: string[],
+  from: Date,
+  to: Date,
+): Promise<Map<string, AttendanceSummary>> {
+  if (employeeIds.length === 0) return new Map();
+
+  // `to` is a @db.Date midnight; the last day's punches happen after it.
+  const end = new Date(to.getTime() + 86_400_000);
+  const rows = await prisma.timeClockEntry.findMany({
+    where: { employeeId: { in: employeeIds }, occurredAt: { gte: from, lt: end } },
+    orderBy: { occurredAt: 'asc' },
+    select: { employeeId: true, kind: true, occurredAt: true },
+  });
+
+  const byEmployee = new Map<string, Punch[]>();
+  for (const row of rows) {
+    const list = byEmployee.get(row.employeeId) ?? [];
+    list.push({ kind: row.kind, occurredAt: row.occurredAt });
+    byEmployee.set(row.employeeId, list);
+  }
+
+  return new Map(
+    [...byEmployee].map(([id, punches]) => [id, summariseAttendance(punches)]),
+  );
+}
+
+/** One person's days between two dates — the report the quotation asks for. */
+export async function timesheetFor(employeeId: string, from: Date, to: Date) {
+  const end = new Date(to.getTime() + 86_400_000);
+  const rows = await prisma.timeClockEntry.findMany({
+    where: { employeeId, occurredAt: { gte: from, lt: end } },
+    orderBy: { occurredAt: 'asc' },
+    select: { kind: true, occurredAt: true },
+  });
+
+  const punches: Punch[] = rows.map((r) => ({ kind: r.kind, occurredAt: r.occurredAt }));
+  return { days: dailyRows(punches), summary: summariseAttendance(punches) };
+}
+
 /** Punches a supervisor still has to look at, oldest first. */
-export async function pendingReviews(limit = 50) {
+export async function pendingReviews(limit = 50, employeeIds: string[] | null = null) {
   return prisma.timeClockEntry.findMany({
-    where: { needsReview: true, reviewedAt: null },
+    where: {
+      needsReview: true,
+      reviewedAt: null,
+      ...(employeeIds === null ? {} : { employeeId: { in: employeeIds } }),
+    },
     orderBy: { occurredAt: 'asc' },
     take: limit,
     include: {

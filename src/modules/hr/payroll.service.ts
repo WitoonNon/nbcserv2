@@ -3,6 +3,7 @@ import type { Prisma } from '@/generated/prisma';
 import { wagesAtDate } from './wage.service';
 import { approvedOvertimeInPeriod } from './overtime.service';
 import { approvedLeaveInPeriod } from './leave.service';
+import { attendanceInPeriod } from './timeclock.service';
 import { leaveDaysBetween } from './leave-rules';
 import { buildPayslip, type OvertimeLine } from './payroll-rules';
 
@@ -63,6 +64,12 @@ export interface CalculationSummary {
   blocked: { employeeId: string; name: string; reason: string }[];
   totalNetSatang: number;
   anyRaisedToLegalMinimum: boolean;
+  /** People the clock shows absent on days no leave covers. */
+  absent: { employeeId: string; name: string; days: number }[];
+  /** Punched in, never out. Their hours are understated until somebody fixes it. */
+  withOpenSessions: number;
+  /** True when nobody in the run had any punches — the clock is not in use yet. */
+  noAttendanceData: boolean;
 }
 
 /**
@@ -90,6 +97,9 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
       blocked: [],
       totalNetSatang: 0,
       anyRaisedToLegalMinimum: false,
+      absent: [],
+      withOpenSessions: 0,
+      noAttendanceData: true,
     };
   }
 
@@ -99,6 +109,7 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
   const wages = await wagesAtDate(ids, period.to);
   const overtime = await approvedOvertimeInPeriod(period.from, period.to);
   const leave = await approvedLeaveInPeriod(period.from, period.to);
+  const attendance = await attendanceInPeriod(ids, period.from, period.to);
 
   const overtimeByEmployee = new Map<string, OvertimeLine[]>();
   for (const row of overtime) {
@@ -131,6 +142,8 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
   const writes: Prisma.PrismaPromise<unknown>[] = [];
   let totalNetSatang = 0;
   let anyRaised = false;
+  const absent: CalculationSummary['absent'] = [];
+  let withOpenSessions = 0;
 
   for (const employee of staff) {
     const name = `${employee.firstNameTh} ${employee.lastNameTh}`;
@@ -163,7 +176,28 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
 
     const taken = leaveByEmployee.get(employee.id) ?? { paid: 0, unpaid: 0 };
     const lines = overtimeByEmployee.get(employee.id) ?? [];
-    const daysWorked = Math.max(0, workingDays - taken.paid - taken.unpaid);
+    const expectedDays = Math.max(0, workingDays - taken.paid - taken.unpaid);
+    const seen = attendance.get(employee.id);
+
+    // How the clock feeds pay, and the line that must not be crossed.
+    //
+    // A DAILY employee is paid for days worked, so days the clock recorded IS
+    // the figure — that is what the client meant by counting real hours.
+    //
+    // A MONTHLY salary is NOT reduced here. Absence without leave is computed
+    // and reported, but deducting it automatically would let one wrong
+    // coordinate take money off somebody's salary, and the scan point is
+    // still a village-level guess. The office decides, from `absentDays`.
+    //
+    // With no punches at all the period is assumed worked and stamped
+    // CALENDAR, so a month run before the clock was rolled out cannot be
+    // mistaken for a month that was actually measured.
+    const daysWorked =
+      seen && basis.employmentType === 'DAILY'
+        ? Math.min(seen.daysPresent, expectedDays)
+        : expectedDays;
+
+    const absentDays = seen ? Math.max(0, expectedDays - seen.daysPresent) : 0;
 
     const slip = buildPayslip({
       basis,
@@ -175,6 +209,11 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
     totalNetSatang += slip.netSatang;
     anyRaised = anyRaised || slip.anyRaisedToLegalMinimum;
 
+    // Reported, never applied on its own. A monthly salary is not reduced by
+    // this figure — see the comment above `daysWorked`.
+    if (absentDays > 0) absent.push({ employeeId: employee.id, name, days: absentDays });
+    if (seen && seen.openSessions > 0) withOpenSessions += 1;
+
     const data = {
       wageRate: basis.wageRate,
       employmentType: basis.employmentType,
@@ -182,6 +221,11 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
       paidLeaveDays: taken.paid,
       unpaidLeaveDays: taken.unpaid,
       overtimeHours: lines.reduce((sum, l) => sum + l.hours, 0),
+      daysPresent: seen?.daysPresent ?? 0,
+      minutesWorked: seen?.minutesWorked ?? 0,
+      absentDays,
+      openSessions: seen?.openSessions ?? 0,
+      attendanceSource: seen ? 'CLOCK' : 'CALENDAR',
       baseSatang: slip.baseSatang,
       overtimeSatang: slip.overtimeSatang,
       additionsSatang: 0,
@@ -208,6 +252,9 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
     blocked,
     totalNetSatang,
     anyRaisedToLegalMinimum: anyRaised,
+    absent,
+    withOpenSessions,
+    noAttendanceData: attendance.size === 0,
   };
 }
 

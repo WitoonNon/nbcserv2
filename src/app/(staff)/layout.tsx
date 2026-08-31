@@ -22,8 +22,8 @@ const NAV: { href: string; label: string; en: string; perm: string; icon: NavIco
   { href: '/assets', label: 'ทะเบียนเครื่อง', en: 'Assets', perm: 'customer.read', icon: 'assets' },
   { href: '/work-orders', label: 'ใบงาน', en: 'Work orders', perm: 'workorder.read', icon: 'workOrders' },
   { href: '/employees', label: 'ทะเบียนพนักงาน', en: 'Employees', perm: 'employee.read', icon: 'employees' },
-  { href: '/timesheet', label: 'ลงเวลางาน', en: 'Timesheet', perm: 'admin.config', icon: 'timesheet' },
-  { href: '/payroll', label: 'เงินเดือน', en: 'Payroll', perm: 'admin.config', icon: 'payroll' },
+  { href: '/timesheet', label: 'ลงเวลางาน', en: 'Timesheet', perm: 'hr.approve', icon: 'timesheet' },
+  { href: '/payroll', label: 'เงินเดือน', en: 'Payroll', perm: 'payroll.read', icon: 'payroll' },
   { href: '/reports', label: 'รายงาน', en: 'Reports', perm: 'report.read', icon: 'reports' },
   { href: '/settings', label: 'ตั้งค่า', en: 'Settings', perm: 'admin.config', icon: 'settings' },
 ];

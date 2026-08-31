@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@/generated/prisma';
-import type { EmploymentType } from '@/generated/prisma';
+import type { EmploymentType, OvertimeKind } from '@/generated/prisma';
 
 /**
  * What somebody was paid, and from when.
@@ -36,6 +36,27 @@ export interface RecordWageInput {
   wageRate: number;
   employmentType: EmploymentType;
   reason?: string | null;
+  /** อัตราค่าล่วงเวลารายบุคคล — omitted or null = ใช้ขั้นต่ำตามกฎหมาย. */
+  otWorkdayMultiplier?: number | null;
+  otHolidayWorkMultiplier?: number | null;
+  otHolidayOtMultiplier?: number | null;
+}
+
+/**
+ * An optional personal overtime multiplier as it goes into the column.
+ *
+ * Rejected rather than clamped when it is below 1: a rate under the plain
+ * hourly wage is a typo every time, and storing it would leave a number on the
+ * record that overtimeAmount() silently overrides. Below the statutory floor
+ * but above 1 is allowed through here and raised at approval, where the
+ * correction is reported to the person making it.
+ */
+function rate(value: number | null | undefined): Prisma.Decimal | null {
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value) || value < 1) {
+    throw new WageError('อัตราค่าล่วงเวลาต้องไม่น้อยกว่า 1 เท่า');
+  }
+  return new Prisma.Decimal(value.toFixed(2));
 }
 
 /** Parsed as a plain calendar date — see the @db.Date note in hr.prisma. */
@@ -92,6 +113,37 @@ export async function wagesAtDate(
   return new Map(
     rows.map((r) => [r.employeeId, { wageRate: Number(r.wageRate), employmentType: r.employmentType }]),
   );
+}
+
+/**
+ * The personal overtime rates in force on a day — ใบเสนอราคาข้อ 5.
+ *
+ * Same "in force on that date" rule as the wage, and for the same reason: a
+ * rate edited in September must not change what August paid. Missing entries
+ * mean "use the statutory floor", which is what almost everybody is on.
+ */
+export async function otRatesAtDate(
+  employeeId: string,
+  on: Date,
+): Promise<Partial<Record<OvertimeKind, number>>> {
+  const row = await prisma.employeeWageChange.findFirst({
+    where: { employeeId, effectiveFrom: { lte: on } },
+    orderBy: { effectiveFrom: 'desc' },
+    select: {
+      otWorkdayMultiplier: true,
+      otHolidayWorkMultiplier: true,
+      otHolidayOtMultiplier: true,
+    },
+  });
+  if (!row) return {};
+
+  const rates: Partial<Record<OvertimeKind, number>> = {};
+  if (row.otWorkdayMultiplier !== null) rates.WORKDAY_OT = Number(row.otWorkdayMultiplier);
+  if (row.otHolidayWorkMultiplier !== null) {
+    rates.HOLIDAY_WORK = Number(row.otHolidayWorkMultiplier);
+  }
+  if (row.otHolidayOtMultiplier !== null) rates.HOLIDAY_OT = Number(row.otHolidayOtMultiplier);
+  return rates;
 }
 
 /** Everything on record, newest first. */
@@ -180,6 +232,9 @@ export async function recordWageChange(
         wageRate: new Prisma.Decimal(input.wageRate.toFixed(2)),
         employmentType: input.employmentType,
         previousRate: before === null ? null : new Prisma.Decimal(before.wageRate.toFixed(2)),
+        otWorkdayMultiplier: rate(input.otWorkdayMultiplier),
+        otHolidayWorkMultiplier: rate(input.otHolidayWorkMultiplier),
+        otHolidayOtMultiplier: rate(input.otHolidayOtMultiplier),
         reason: input.reason?.trim() || null,
         recordedById: actor.id,
         recordedByName: actor.name,

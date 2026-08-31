@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import type { OvertimeKind } from '@/generated/prisma';
 import { LEGAL_MINIMUM_MULTIPLIER } from './payroll-rules';
+import { otRatesAtDate } from './wage.service';
 
 /**
  * Asking for overtime, and deciding on it.
@@ -92,7 +93,14 @@ export async function approveOvertime(params: {
 }) {
   const request = await prisma.overtimeRequest.findUnique({
     where: { id: params.requestId },
-    select: { id: true, status: true, kind: true, paidInPeriodId: true },
+    select: {
+      id: true,
+      status: true,
+      kind: true,
+      paidInPeriodId: true,
+      employeeId: true,
+      workDate: true,
+    },
   });
   if (!request) throw new OvertimeError('ไม่พบคำขอโอที', 404);
   if (request.status !== 'PENDING') {
@@ -100,11 +108,17 @@ export async function approveOvertime(params: {
   }
 
   const floor = LEGAL_MINIMUM_MULTIPLIER[request.kind];
+
+  // The personal rate (ใบเสนอราคาข้อ 5) is the DEFAULT, not a ceiling: it is
+  // used when the approver did not type a number, and read as it stood on the
+  // day the work was done rather than today. Whatever it says, the floor below
+  // still applies — a personal rate cannot take somebody under the law.
+  const personal = (await otRatesAtDate(request.employeeId, request.workDate))[request.kind];
+
   const asked = params.multiplier;
-  const multiplier = Math.max(
-    typeof asked === 'number' && Number.isFinite(asked) ? asked : floor,
-    floor,
-  );
+  const chosen =
+    typeof asked === 'number' && Number.isFinite(asked) ? asked : (personal ?? floor);
+  const multiplier = Math.max(chosen, floor);
 
   await prisma.overtimeRequest.update({
     where: { id: request.id },
@@ -117,7 +131,7 @@ export async function approveOvertime(params: {
     },
   });
 
-  return { multiplier, raisedToLegalMinimum: (asked ?? floor) < floor };
+  return { multiplier, raisedToLegalMinimum: chosen < floor };
 }
 
 /** Refusing needs a reason — "no" on its own is not something anyone can act on. */
@@ -185,9 +199,36 @@ export async function approvedOvertimeInPeriod(from: Date, to: Date) {
   });
 }
 
-export async function pendingOvertime(limit = 100) {
+/**
+ * One employee's own overtime requests, newest first.
+ *
+ * Includes every status. A request that was refused is the answer to "what
+ * happened to the one I sent" — hiding it once decided makes the screen look
+ * like the request was never made.
+ */
+export async function myOvertimeRequests(employeeId: string, limit = 30) {
   return prisma.overtimeRequest.findMany({
-    where: { status: 'PENDING' },
+    where: { employeeId },
+    orderBy: [{ workDate: 'desc' }, { createdAt: 'desc' }],
+    take: limit,
+    select: {
+      id: true,
+      workDate: true,
+      kind: true,
+      hours: true,
+      reason: true,
+      status: true,
+      approvedMultiplier: true,
+      decisionNote: true,
+      decidedAt: true,
+      paidInPeriodId: true,
+    },
+  });
+}
+
+export async function pendingOvertime(limit = 100, employeeIds: string[] | null = null) {
+  return prisma.overtimeRequest.findMany({
+    where: { status: 'PENDING', ...(employeeIds === null ? {} : { employeeId: { in: employeeIds } }) },
     orderBy: { workDate: 'asc' },
     take: limit,
     include: {

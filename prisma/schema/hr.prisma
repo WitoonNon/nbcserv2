@@ -155,6 +155,20 @@ model EmployeeWageChange {
   /// find and subtract the previous one.
   previousRate   Decimal?       @db.Decimal(12, 2)
 
+  /// อัตราค่าล่วงเวลารายบุคคล — ใบเสนอราคาข้อ 5.
+  ///
+  /// Null means "use the statutory floor", which is what almost everybody is
+  /// on. These live beside the wage rather than on Employee for the same
+  /// reason the wage does: payroll is run for periods that have already
+  /// ended, and a rate edited in September must not change what August paid.
+  ///
+  /// A value BELOW the floor is never applied — overtimeAmount() raises it —
+  /// so a wrong number entered here costs the company money, never the
+  /// employee their legal minimum.
+  otWorkdayMultiplier     Decimal? @db.Decimal(4, 2)
+  otHolidayWorkMultiplier Decimal? @db.Decimal(4, 2)
+  otHolidayOtMultiplier   Decimal? @db.Decimal(4, 2)
+
   /// "ปรับตามผลงานประจำปี", "ผ่านทดลองงาน" — the client's หมายเหตุ.
   reason String?
 
@@ -400,6 +414,26 @@ model PayrollLine {
   paidLeaveDays   Decimal @default(0) @db.Decimal(5, 2)
   unpaidLeaveDays Decimal @default(0) @db.Decimal(5, 2)
   overtimeHours   Decimal @default(0) @db.Decimal(6, 2)
+
+  /// What the time clock actually recorded for this period.
+  ///
+  /// Kept beside `daysWorked` rather than replacing it, because they answer
+  /// different questions: `daysWorked` is what the person is PAID for, and
+  /// these are what the clock SAW. They differ whenever somebody was absent
+  /// without leave, and that difference is a decision for the office rather
+  /// than something payroll should apply on its own — see payroll.service.ts.
+  daysPresent   Decimal @default(0) @db.Decimal(5, 2)
+  minutesWorked Int     @default(0)
+  /// Days in the period that are neither worked nor covered by leave.
+  absentDays    Decimal @default(0) @db.Decimal(5, 2)
+  /// Punched in and never out. Counted, never guessed at.
+  openSessions  Int     @default(0)
+
+  /// CLOCK when attendance came from real punches, CALENDAR when there were
+  /// none to read and the period was assumed worked. Printed on the run so a
+  /// month calculated before the clock was rolled out cannot be mistaken for
+  /// a month that was actually measured.
+  attendanceSource String @default("CALENDAR")
 
   /// All amounts in satang, as integers. Money computed in floating-point
   /// baht drifts across a month of lines.
