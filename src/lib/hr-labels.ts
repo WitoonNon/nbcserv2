@@ -26,3 +26,33 @@ export const ACCESS_ACTION_LABEL: Record<string, string> = {
   edit: 'แก้ไขข้อมูล',
   export: 'ส่งออกข้อมูล',
 };
+
+/**
+ * Roles the office may hand out when creating a staff login.
+ *
+ * Here rather than beside the service that uses it, because the form that
+ * renders the dropdown is a client component: importing this from a module
+ * marked `server-only` pulls prisma and node:crypto into the browser bundle,
+ * and the build fails with an error that names the wrong file. Typecheck and
+ * the test suite both pass in that state — only `next build` catches it.
+ *
+ * SUPER_ADMIN is deliberately absent. The office creates accounts for staff,
+ * not administrators.
+ */
+export const ASSIGNABLE_ROLES = [
+  'TECHNICIAN',
+  'ADMIN',
+  'SUPERVISOR',
+  'DISPATCHER',
+  'ACCOUNTING',
+] as const;
+
+export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+export const ASSIGNABLE_ROLE_LABEL: Record<AssignableRole, string> = {
+  TECHNICIAN: 'ช่างเทคนิค',
+  ADMIN: 'ธุรการ / คอลเซ็นเตอร์',
+  SUPERVISOR: 'หัวหน้างาน',
+  DISPATCHER: 'ผู้จ่ายงาน',
+  ACCOUNTING: 'บัญชี',
+};

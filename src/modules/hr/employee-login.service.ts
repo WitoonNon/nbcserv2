@@ -2,6 +2,7 @@ import 'server-only';
 import { randomInt } from 'node:crypto';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
+import { ASSIGNABLE_ROLES, type AssignableRole } from '@/lib/hr-labels';
 
 /**
  * Giving an employee a way to sign in.
@@ -21,15 +22,7 @@ import { hashPassword } from '@/lib/auth/password';
 
 export class EmployeeLoginError extends Error {}
 
-/** Roles the office may hand out. SUPER_ADMIN is not one of them. */
-export const ASSIGNABLE_ROLES = [
-  'TECHNICIAN',
-  'ADMIN',
-  'SUPERVISOR',
-  'DISPATCHER',
-  'ACCOUNTING',
-] as const;
-export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+export { ASSIGNABLE_ROLES, type AssignableRole } from '@/lib/hr-labels';
 
 /**
  * A first password that survives being read down a phone line.

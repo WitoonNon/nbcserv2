@@ -7,7 +7,7 @@ import {
   unlinkLoginAction,
   type LoginState,
 } from '@/app/(staff)/employees/login-actions';
-import { ASSIGNABLE_ROLES } from '@/modules/hr/employee-login.service';
+import { ASSIGNABLE_ROLES, ASSIGNABLE_ROLE_LABEL } from '@/lib/hr-labels';
 
 /**
  * The account that lets this person clock in.
@@ -24,14 +24,6 @@ import { ASSIGNABLE_ROLES } from '@/modules/hr/employee-login.service';
  * is somebody assuming they can look it up later and quietly locking a
  * technician out on the morning it matters.
  */
-
-const ROLE_LABEL: Record<string, string> = {
-  TECHNICIAN: 'ช่างเทคนิค',
-  ADMIN: 'ธุรการ / คอลเซ็นเตอร์',
-  SUPERVISOR: 'หัวหน้างาน',
-  DISPATCHER: 'ผู้จ่ายงาน',
-  ACCOUNTING: 'บัญชี',
-};
 
 const input =
   'w-full border border-[var(--color-line)] rounded-[3px] px-3 py-2 text-sm bg-white ' +
@@ -137,7 +129,7 @@ export function EmployeeLogin({
             <select name="role" defaultValue="TECHNICIAN" className={input}>
               {ASSIGNABLE_ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {ROLE_LABEL[r] ?? r}
+                  {ASSIGNABLE_ROLE_LABEL[r]}
                 </option>
               ))}
             </select>

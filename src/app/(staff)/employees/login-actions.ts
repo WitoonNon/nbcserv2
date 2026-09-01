@@ -7,9 +7,8 @@ import {
   resetEmployeePassword,
   unlinkLogin,
   EmployeeLoginError,
-  ASSIGNABLE_ROLES,
-  type AssignableRole,
 } from '@/modules/hr/employee-login.service';
+import { ASSIGNABLE_ROLES, type AssignableRole } from '@/lib/hr-labels';
 
 export interface LoginState {
   error?: string;
