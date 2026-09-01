@@ -274,6 +274,21 @@ export async function viewSensitive(
   };
 }
 
+/**
+ * What the personnel form can set.
+ *
+ * `userId` is deliberately absent. The link between a record and a login is
+ * owned by employee-login.service — created with the account, removed when it
+ * is detached — and never by this form, which has no field for it.
+ *
+ * It used to be here, read from a form input that does not exist. Every save
+ * therefore resolved it to null and silently unlinked the account: an admin
+ * correcting a phone number, or opening the record and pressing save without
+ * changing anything, cut that person off from the clock and from filing
+ * overtime, while their login still worked. The register said "ยังไม่มีบัญชี"
+ * and nothing explained why. Found in QA on the second edit of the first
+ * employee who had an account.
+ */
 export interface EmployeeInput {
   employeeCode: string;
   titleTh?: string | null;
@@ -299,7 +314,6 @@ export interface EmployeeInput {
   bankName?: string | null;
   bankAccount?: string | null;
   note?: string | null;
-  userId?: string | null;
 }
 
 function dateOrNull(v: string | null | undefined): Date | null {
@@ -367,7 +381,6 @@ function toRow(input: EmployeeInput) {
     resignedAt: dateOrNull(input.resignedAt),
     bankName: input.bankName?.trim() || null,
     note: input.note?.trim() || null,
-    userId: input.userId || null,
     ...(nid
       ? { nationalIdEnc: encryptOptional(digitsOnly(nid)), nationalIdLast4: last4(nid) }
       : {}),

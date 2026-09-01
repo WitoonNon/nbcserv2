@@ -53,7 +53,9 @@ function readForm(formData: FormData): EmployeeInput {
     bankName: str('bankName'),
     bankAccount: str('bankAccount'),
     note: str('note'),
-    userId: str('userId'),
+    // No userId: the form has no such field, and reading one produced null on
+    // every save, which unlinked the login. The account is attached and
+    // detached from the login panel, not from here.
   };
 }
 

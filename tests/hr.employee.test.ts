@@ -353,3 +353,58 @@ describe('removing a record typed in by mistake', () => {
 
   });
 });
+
+describe('editing a record that has a login', () => {
+  it('keeps the account attached when nothing about it changed', async () => {
+    // The bug QA found on the second edit of the first employee with an
+    // account: EmployeeInput carried a userId read from a form field that does
+    // not exist, so every save resolved it to null and cut the person off from
+    // the clock and from filing overtime, while their login still worked.
+    const id = await createEmployee({ ...base(), employeeCode: 'TESTEMP-LINK' }, ACTOR);
+    await createLoginForEmployee({
+      employeeId: id,
+      email: 'testemp.link@nbcgroup.co.th',
+      role: 'TECHNICIAN',
+    });
+    expect((await getEmployee(id))!.hasLogin).toBe(true);
+
+    // Pressing save without touching anything.
+    await updateEmployee(id, { ...base(), employeeCode: 'TESTEMP-LINK' }, ACTOR);
+    expect((await getEmployee(id))!.hasLogin).toBe(true);
+
+    // And an ordinary edit — a corrected phone number.
+    await updateEmployee(
+      id,
+      { ...base(), employeeCode: 'TESTEMP-LINK', phone: '0812345678' },
+      ACTOR,
+    );
+
+    const after = await getEmployee(id);
+    expect(after!.hasLogin).toBe(true);
+    expect(after!.loginEmail).toBe('testemp.link@nbcgroup.co.th');
+    expect(after!.phone).toBe('0812345678');
+  });
+
+  it('keeps it through a status change too', async () => {
+    // The other edit an owner makes constantly: probation to permanent.
+    const id = await createEmployee(
+      { ...base(), employeeCode: 'TESTEMP-LINK2', status: 'PROBATION' },
+      ACTOR,
+    );
+    await createLoginForEmployee({
+      employeeId: id,
+      email: 'testemp.link2@nbcgroup.co.th',
+      role: 'TECHNICIAN',
+    });
+
+    await updateEmployee(
+      id,
+      { ...base(), employeeCode: 'TESTEMP-LINK2', status: 'ACTIVE' },
+      ACTOR,
+    );
+
+    const after = await getEmployee(id);
+    expect(after!.status).toBe('ACTIVE');
+    expect(after!.hasLogin).toBe(true);
+  });
+});
