@@ -30,7 +30,16 @@ import { issueStaticToken } from '../src/modules/hr/timeclock-token';
  * file is what still needs a real database behind it.
  */
 
-const OFFICE = { lat: 13.968264, lng: 100.404581 };
+/**
+ * Filled from the configured scan point in beforeAll, never hardcoded.
+ *
+ * This used to restate the seeded coordinate, so the day the client sent the
+ * real pin the file failed — a test that breaks when a placeholder is replaced
+ * by the truth is testing the placeholder. What matters here is that punching
+ * AT the scan point passes and punching away from it does not, whatever the
+ * point happens to be.
+ */
+let OFFICE = { lat: 0, lng: 0 };
 const SCAN_POINT = 'OFFICE';
 
 let employeeId: string;
@@ -77,6 +86,9 @@ beforeEach(async () => {
     select: { id: true },
   });
   employeeId = employee.id;
+
+  const policy = await getScanPointPolicy();
+  OFFICE = { lat: policy.office.lat, lng: policy.office.lng };
 });
 
 afterAll(async () => {
@@ -85,19 +97,25 @@ afterAll(async () => {
 });
 
 describe('where the scan point is', () => {
-  it('reads the office location the client gave', async () => {
+  it('reads a usable office location and radius', async () => {
     const policy = await getScanPointPolicy();
 
-    expect(policy.office.lat).toBeCloseTo(OFFICE.lat, 4);
+    // A coordinate at all, somewhere on Earth, with a radius that means
+    // something. The exact numbers belong in configuration, not in a test.
+    expect(Math.abs(policy.office.lat)).toBeGreaterThan(0);
+    expect(Math.abs(policy.office.lng)).toBeGreaterThan(0);
     expect(policy.radiusMetres).toBeGreaterThan(0);
   });
 
-  it('reports that the coordinate is still a guess', async () => {
-    // Seeded from the centre of the sub-district, not read at the scan point.
-    // A screen that shows this as settled would stop anyone fixing it.
+  it('carries whether the coordinate is still a guess through to the screen', async () => {
+    // The flag itself, not a particular state of it. It was true while the
+    // point was a sub-district centroid and false once the client sent the
+    // real pin on 31 ส.ค.; both are correct at their time, and what must keep
+    // working is that the screen is told which one applies. Showing a guess as
+    // settled is what would stop anybody fixing it.
     const flagged = await prisma.appConfig.findUnique({ where: { key: TIMECLOCK_KEYS.lat } });
-    expect(flagged?.isAssumption).toBe(true);
-    expect((await getScanPointPolicy()).isAssumption).toBe(true);
+    expect(typeof flagged?.isAssumption).toBe('boolean');
+    expect((await getScanPointPolicy()).isAssumption).toBe(flagged?.isAssumption);
   });
 });
 
