@@ -53,9 +53,19 @@ function Row({ e }: { e: EmployeeRow }) {
       <td className="py-2.5 pr-3">
         {e.fullName}
         {e.nickname && <span className="text-[var(--color-muted)]"> ({e.nickname})</span>}
-        <span className="block text-[11px] text-[var(--color-muted)]">
-          {e.isTechnician ? 'ช่าง · มีในระบบจ่ายงาน' : e.hasLogin ? 'มีบัญชีเข้าระบบ' : 'ไม่มีบัญชีเข้าระบบ'}
-        </span>
+        {/* Stated on the row rather than left to be discovered one record at a
+            time: without an account this person cannot scan the QR at all, and
+            the office needs to see that while entering staff, not on the
+            morning somebody is standing at the door. */}
+        {e.hasLogin ? (
+          <span className="block text-[11px] text-[var(--color-muted)]">
+            {e.isTechnician ? 'ช่าง · มีในระบบจ่ายงาน' : 'ลงเวลาได้'}
+          </span>
+        ) : (
+          <span className="block text-[11px] text-[var(--color-brand-orange-600)]">
+            ยังไม่มีบัญชี — ลงเวลาไม่ได้
+          </span>
+        )}
       </td>
       <td className="py-2.5 pr-3">
         {e.position}
@@ -104,6 +114,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
     console.error('[employees] list failed', e);
     dbDown = true;
   }
+
+  const noLoginHere = rows.filter((r) => !r.hasLogin).length;
 
   return (
     <div className="space-y-4 max-w-6xl">
@@ -176,6 +188,18 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
       {dbDown && (
         <div className="card p-4 bg-[var(--color-brand-orange-50)] border-[var(--color-brand-orange)]/40 text-sm">
           ยังเชื่อมต่อฐานข้อมูลไม่ได้
+        </div>
+      )}
+
+      {/* Counted over this page rather than the whole register, and worded to
+          say so. The alternative is another query on every visit for a prompt
+          that is only useful while somebody is entering staff. */}
+      {noLoginHere > 0 && (
+        <div className="card p-3 bg-[var(--color-brand-orange-50)] border-[var(--color-brand-orange)]/40 text-sm">
+          หน้านี้มี <b>{noLoginHere} คน</b> ที่ยังไม่มีบัญชีเข้าระบบ — สแกน QR ลงเวลาไม่ได้
+          {can(user, 'admin.users')
+            ? ' เปิดหน้าของแต่ละคนแล้วกด “สร้างบัญชีเข้าระบบ”'
+            : ' แจ้งผู้ดูแลระบบให้สร้างบัญชีให้'}
         </div>
       )}
 

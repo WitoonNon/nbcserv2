@@ -4,6 +4,7 @@ import { requirePermission, can } from '@/lib/auth/guard';
 import { getEmployee, employeeAccessLog } from '@/modules/hr/employee.service';
 import { SensitiveReveal } from '@/components/hr/SensitiveReveal';
 import { WageHistory } from '@/components/hr/WageHistory';
+import { EmployeeLogin } from '@/components/hr/EmployeeLogin';
 import { wageHistory } from '@/modules/hr/wage.service';
 import {
   EMPLOYMENT_TYPE_LABEL,
@@ -109,16 +110,6 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             label="เลขบัญชี"
             value={employee.bankAccountMasked && <span className="font-mono">{employee.bankAccountMasked}</span>}
           />
-          <Field
-            label="บัญชีเข้าระบบ"
-            value={
-              employee.hasLogin ? (
-                employee.loginEmail
-              ) : (
-                <span className="text-[var(--color-muted)]">ไม่มี — ลงเวลาผ่าน QR ได้อย่างเดียว</span>
-              )
-            }
-          />
         </dl>
       </div>
 
@@ -145,6 +136,14 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           </p>
         )}
       </div>
+
+      {can(user, 'admin.users') && (
+        <EmployeeLogin
+          employeeId={employee.id}
+          loginEmail={employee.loginEmail}
+          suggestedEmail={employee.email}
+        />
+      )}
 
       {maySeeSensitive ? (
         <SensitiveReveal employeeId={employee.id} />
