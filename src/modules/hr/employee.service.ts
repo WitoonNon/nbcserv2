@@ -427,6 +427,116 @@ export async function updateEmployee(
   });
 }
 
+export interface DeletionCheck {
+  canDelete: boolean;
+  /** Why not, in words the office reads. */
+  reasonTh: string | null;
+  blockers: { label: string; count: number }[];
+}
+
+/**
+ * Whether a record can be removed outright, and what stops it.
+ *
+ * There is deliberately no general delete. A personnel record is referenced by
+ * payroll that has been run and punches that were counted; removing one would
+ * take the basis of a payment with it, and "why was this person paid" is a
+ * question that has to stay answerable. Resigning somebody is the normal end
+ * of their record, and that is what the status field is for.
+ *
+ * But a record typed in by mistake — a duplicate, a test row, a name entered
+ * against the wrong person — has none of that behind it, and leaving it as a
+ * permanent "resigned" entry means the register never matches the company.
+ * QA hit exactly this: four test employees that could only be hidden, never
+ * removed, and the only way out was hand-written SQL.
+ *
+ * So: deletable while nothing depends on it, and refused with the reason once
+ * anything does.
+ */
+export async function canDeleteEmployee(id: string): Promise<DeletionCheck> {
+  const employee = await prisma.employee.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!employee) {
+    return { canDelete: false, reasonTh: 'ไม่พบพนักงานที่ระบุ', blockers: [] };
+  }
+
+  const [punches, overtime, leave, payrollLines, technician] = await Promise.all([
+    prisma.timeClockEntry.count({ where: { employeeId: id } }),
+    prisma.overtimeRequest.count({ where: { employeeId: id } }),
+    prisma.leaveRequest.count({ where: { employeeId: id } }),
+    prisma.payrollLine.count({ where: { employeeId: id } }),
+    prisma.technician.count({ where: { employeeId: id } }),
+  ]);
+
+  const blockers = [
+    { label: 'การลงเวลา', count: punches },
+    { label: 'คำขอโอที', count: overtime },
+    { label: 'คำขอลา', count: leave },
+    { label: 'รายการเงินเดือน', count: payrollLines },
+    { label: 'ผูกกับช่างในระบบจ่ายงาน', count: technician },
+  ].filter((b) => b.count > 0);
+
+  if (blockers.length === 0) return { canDelete: true, reasonTh: null, blockers: [] };
+
+  return {
+    canDelete: false,
+    reasonTh:
+      'ลบถาวรไม่ได้เพราะมีข้อมูลอ้างถึงอยู่ — ถ้าคนนี้ลาออก ให้เปลี่ยนสถานะเป็น "ลาออกแล้ว" แทน',
+    blockers,
+  };
+}
+
+/**
+ * Remove a record that nothing depends on.
+ *
+ * Re-checks rather than trusting the screen: the button is only rendered when
+ * the record looks deletable, and between rendering and pressing somebody may
+ * have filed overtime against it.
+ *
+ * The wage history and access log go with it — they describe a person who is
+ * about to stop existing and reference nothing else. The login is detached and
+ * deactivated rather than deleted, on the same reasoning as unlinkLogin: jobs
+ * and work orders point at the user, not the employee.
+ */
+export async function deleteEmployee(
+  id: string,
+  actor: { id: string; name: string },
+): Promise<void> {
+  const check = await canDeleteEmployee(id);
+  if (!check.canDelete) {
+    throw new EmployeeError(check.reasonTh ?? 'ลบไม่ได้');
+  }
+
+  const employee = await prisma.employee.findUniqueOrThrow({
+    where: { id },
+    select: { id: true, userId: true, employeeCode: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.employeeWageChange.deleteMany({ where: { employeeId: id } });
+    await tx.employeeAccessLog.deleteMany({ where: { employeeId: id } });
+    await tx.employee.delete({ where: { id } });
+
+    if (employee.userId) {
+      await tx.session.deleteMany({ where: { userId: employee.userId } });
+      await tx.user.update({ where: { id: employee.userId }, data: { isActive: false } });
+    }
+
+    // Recorded against no employee, because there is no longer one to point
+    // at — the entityId keeps the code so the row can still be read.
+    await tx.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'employee.delete',
+        entityType: 'Employee',
+        entityId: employee.employeeCode,
+        before: { employeeCode: employee.employeeCode },
+      },
+    });
+  });
+}
+
 export interface AccessLogRow {
   actorName: string;
   action: string;

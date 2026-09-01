@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePermission, can } from '@/lib/auth/guard';
-import { getEmployee, employeeAccessLog } from '@/modules/hr/employee.service';
+import { getEmployee, employeeAccessLog, canDeleteEmployee } from '@/modules/hr/employee.service';
 import { SensitiveReveal } from '@/components/hr/SensitiveReveal';
 import { WageHistory } from '@/components/hr/WageHistory';
 import { EmployeeLogin } from '@/components/hr/EmployeeLogin';
+import { DeleteEmployee } from '@/components/hr/DeleteEmployee';
 import { wageHistory } from '@/modules/hr/wage.service';
 import {
   EMPLOYMENT_TYPE_LABEL,
@@ -45,6 +46,11 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
     );
   }
   if (!employee) notFound();
+
+  // Only asked for by someone who could act on the answer.
+  const deletion = can(user, 'employee.write')
+    ? await canDeleteEmployee(id).catch(() => null)
+    : null;
 
   const maySeeSensitive = can(user, 'employee.sensitive');
   // Both of these carry wages, so they are fetched only for a reader who is
@@ -162,6 +168,16 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           history={wages}
           currentType={employee.employmentType}
           canEdit
+        />
+      )}
+
+      {can(user, 'employee.write') && deletion && (
+        <DeleteEmployee
+          employeeId={employee.id}
+          employeeName={employee.fullName}
+          canDelete={deletion.canDelete}
+          reasonTh={deletion.reasonTh}
+          blockers={deletion.blockers}
         />
       )}
 

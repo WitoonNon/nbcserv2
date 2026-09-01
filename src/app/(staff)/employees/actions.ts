@@ -7,6 +7,7 @@ import {
   createEmployee,
   updateEmployee,
   viewSensitive,
+  deleteEmployee,
   EmployeeError,
   type EmployeeInput,
   type SensitiveFields,
@@ -155,4 +156,39 @@ export async function revealSensitiveAction(
     console.error('[employees] reveal failed', e);
     return { error: 'เปิดดูข้อมูลไม่สำเร็จ' };
   }
+}
+
+export interface DeleteState {
+  error?: string;
+}
+
+/**
+ * Remove a record typed in by mistake.
+ *
+ * Behind `employee.write`, and the service refuses once anything references
+ * the record — payroll, punches, requests. Somebody who has actually worked
+ * here is resigned, not deleted; this exists for the duplicate and the test
+ * row, which otherwise sit in the register for good as a permanent "resigned"
+ * entry that never happened.
+ */
+export async function deleteEmployeeAction(
+  _prev: DeleteState,
+  formData: FormData,
+): Promise<DeleteState> {
+  const id = String(formData.get('id') ?? '');
+  if (!id) return { error: 'ไม่ได้ระบุพนักงาน' };
+
+  try {
+    const user = await assertPermission('employee.write');
+    await deleteEmployee(id, { id: user.id, name: user.name });
+  } catch (e) {
+    if (e instanceof ForbiddenError || e instanceof EmployeeError) return { error: e.message };
+    console.error('[employees] delete failed', e);
+    return { error: 'ลบไม่สำเร็จ กรุณาลองใหม่' };
+  }
+
+  // Outside the try: redirect throws to unwind, and the catch above would
+  // report a failure on a delete that worked.
+  revalidatePath('/employees');
+  redirect('/employees');
 }

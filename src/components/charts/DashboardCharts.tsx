@@ -64,6 +64,9 @@ export function JobsByMonthChart({ data }: { data: MonthPoint[] }) {
       hint="แยกตามประเภทงาน — ใช้ดูฤดูกาลว่าเดือนไหนงานล้างเข้ามาก เพื่อวางกำลังช่างล่วงหน้า"
       empty={total === 0 ? 'ยังไม่มีงานในรอบ 12 เดือน' : undefined}
       height={300}
+      // First chart on the page, always above the fold — fetching the engine
+      // when it scrolls into view would only add a beat to a certain download.
+      eager
     >
       <Column
         autoFit

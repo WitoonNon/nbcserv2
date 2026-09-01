@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../src/lib/db';
 import {
+  EmployeeError,
+  canDeleteEmployee,
   createEmployee,
-  updateEmployee,
+  deleteEmployee,
+  employeeAccessLog,
   getEmployee,
   listEmployees,
-  viewSensitive,
-  employeeAccessLog,
-  EmployeeError,
   type EmployeeInput,
+  updateEmployee,
+  viewSensitive,
 } from '../src/modules/hr/employee.service';
+import { setWageFromEmployeeForm } from '../src/modules/hr/wage.service';
+import { createLoginForEmployee } from '../src/modules/hr/employee-login.service';
 import {
   encryptField,
   decryptField,
@@ -38,7 +42,15 @@ import {
 const NID = '1101700207366';
 const ACCOUNT = '123-4-56789-0';
 const CODE = 'TESTEMP-001';
-const ACTOR = { id: 'test-actor', name: 'ผู้ทดสอบ' };
+/**
+ * A real user, because deleting a record writes an AuditLog row and
+ * `AuditLog.actorId` is a foreign key.
+ *
+ * EmployeeAccessLog deliberately has no such constraint — that trail has to
+ * survive the account it might be about — but a deletion is recorded against
+ * the system audit log, where the actor is always a live session user.
+ */
+const ACTOR = { id: '', name: 'ผู้ทดสอบ' };
 
 function base(): EmployeeInput {
   return {
@@ -56,18 +68,48 @@ function base(): EmployeeInput {
 }
 
 async function cleanUp() {
+  // Guarded on a prefix throughout: an unset filter in Prisma matches every
+  // row, and these deleteMany calls would then empty the tables for the whole
+  // company.
   const rows = await prisma.employee.findMany({
     where: { employeeCode: { startsWith: 'TESTEMP-' } },
     select: { id: true },
   });
-  // Guarded: an unset filter in Prisma matches everything.
-  if (rows.length === 0) return;
-  const ids = rows.map((r) => r.id);
-  await prisma.employeeAccessLog.deleteMany({ where: { employeeId: { in: ids } } });
-  await prisma.employee.deleteMany({ where: { id: { in: ids } } });
+  if (rows.length > 0) {
+    const ids = rows.map((r) => r.id);
+    await prisma.overtimeRequest.deleteMany({ where: { employeeId: { in: ids } } });
+    await prisma.payrollLine.deleteMany({ where: { employeeId: { in: ids } } });
+    await prisma.employeeWageChange.deleteMany({ where: { employeeId: { in: ids } } });
+    await prisma.employeeAccessLog.deleteMany({ where: { employeeId: { in: ids } } });
+    await prisma.employee.deleteMany({ where: { id: { in: ids } } });
+  }
+
+  // Accounts the login test creates. Without this a run that fails part-way
+  // leaves the address taken, and every later run then fails on the clash
+  // rather than on whatever it was checking — which is what just happened.
+  const users = await prisma.user.findMany({
+    where: { email: { startsWith: 'testemp.' } },
+    select: { id: true },
+  });
+  if (users.length > 0) {
+    const userIds = users.map((u) => u.id);
+    await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  }
+
+  // The throwaway period the payroll-blocker test needs.
+  await prisma.payrollPeriod.deleteMany({ where: { code: '2500-01' } });
 }
 
-beforeAll(cleanUp);
+beforeAll(async () => {
+  const user = await prisma.user.findFirstOrThrow({
+    where: { email: 'admin@nbcgroup.co.th' },
+    select: { id: true },
+  });
+  ACTOR.id = user.id;
+  await cleanUp();
+});
 afterAll(cleanUp);
 
 describe('field encryption', () => {
@@ -225,5 +267,89 @@ describe('editing without erasing', () => {
 
     const e = await getEmployee(id);
     expect(e!.phone).toBe('0811111111');
+  });
+});
+
+describe('removing a record typed in by mistake', () => {
+  it('allows it while nothing depends on the person', async () => {
+    const id = await createEmployee({ ...base(), employeeCode: 'TESTEMP-DEL1' }, ACTOR);
+
+    const check = await canDeleteEmployee(id);
+    expect(check.canDelete).toBe(true);
+    expect(check.blockers).toEqual([]);
+
+    await deleteEmployee(id, ACTOR);
+    expect(await getEmployee(id)).toBeNull();
+  });
+
+  it('refuses once payroll has been run against them', async () => {
+    // The whole reason there is no general delete: removing this record takes
+    // the basis of a payment with it, and "why was this person paid" has to
+    // stay answerable.
+    const id = await createEmployee({ ...base(), employeeCode: 'TESTEMP-DEL2' }, ACTOR);
+    const period = await prisma.payrollPeriod.create({
+      data: {
+        code: '2500-01',
+        from: new Date(Date.UTC(1957, 0, 1)),
+        to: new Date(Date.UTC(1957, 0, 31)),
+      },
+      select: { id: true },
+    });
+    await prisma.payrollLine.create({
+      data: { periodId: period.id, employeeId: id, wageRate: 500, employmentType: 'DAILY' },
+    });
+
+    const check = await canDeleteEmployee(id);
+    expect(check.canDelete).toBe(false);
+    expect(check.reasonTh).toContain('ลาออกแล้ว');
+    expect(check.blockers.some((b) => b.label === 'รายการเงินเดือน')).toBe(true);
+
+    await expect(deleteEmployee(id, ACTOR)).rejects.toBeInstanceOf(EmployeeError);
+    expect(await getEmployee(id)).not.toBeNull();
+
+  });
+
+  it('re-checks at the moment of deleting, not when the button was drawn', async () => {
+    const id = await createEmployee({ ...base(), employeeCode: 'TESTEMP-DEL3' }, ACTOR);
+    // Deletable when the screen rendered.
+    expect((await canDeleteEmployee(id)).canDelete).toBe(true);
+
+    // Somebody files overtime in the meantime.
+    await prisma.overtimeRequest.create({
+      data: {
+        employeeId: id,
+        workDate: new Date(Date.UTC(2026, 0, 5)),
+        kind: 'WORKDAY_OT',
+        hours: 2,
+        reason: 'ทดสอบ',
+      },
+    });
+
+    await expect(deleteEmployee(id, ACTOR)).rejects.toBeInstanceOf(EmployeeError);
+  });
+
+  it('takes the wage history with it and leaves the login deactivated', async () => {
+    const id = await createEmployee(
+      { ...base(), employeeCode: 'TESTEMP-DEL4', wageRate: 500 },
+      ACTOR,
+    );
+    await setWageFromEmployeeForm(
+      { employeeId: id, wageRate: 500, employmentType: 'DAILY', hiredAt: null },
+      ACTOR,
+    );
+    const login = await createLoginForEmployee({
+      employeeId: id,
+      email: 'testemp.del4@nbcgroup.co.th',
+      role: 'TECHNICIAN',
+    });
+
+    await deleteEmployee(id, ACTOR);
+
+    expect(await prisma.employeeWageChange.count({ where: { employeeId: id } })).toBe(0);
+    // Kept but disabled: jobs and work orders point at the user, not the
+    // employee, and deleting it would orphan the record of who did what.
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: login.email } });
+    expect(user.isActive).toBe(false);
+
   });
 });

@@ -4,12 +4,7 @@ import { env } from '@/lib/env';
 import type { TimeClockKind } from '@/generated/prisma';
 import { checkGeofence, type Coordinates } from './geofence';
 import { verifyToken } from './timeclock-token';
-import {
-  dailyRows,
-  summariseAttendance,
-  type AttendanceSummary,
-  type Punch,
-} from './worktime';
+import { bangkokDay, dailyRows, summariseAttendance, type AttendanceSummary, type Punch } from './worktime';
 
 /**
  * Clocking in and out (งานเพิ่ม 10,000 — ลงเวลาเข้า-ออก).
@@ -222,11 +217,28 @@ export async function punchClock(input: PunchInput): Promise<PunchResult> {
   };
 }
 
-/** One person's punches for a day, oldest first. */
+/** Bangkok is UTC+7 all year — no daylight saving to account for. */
+const BANGKOK_OFFSET_MS = 7 * 3_600_000;
+
+/**
+ * One person's punches for a day, oldest first.
+ *
+ * Bucketed by the Bangkok calendar day, which is what everybody reading this
+ * means by "a day". It used to slice on the UTC day, and Bangkok is seven
+ * hours ahead: every punch between midnight and 06:59 local fell on the
+ * previous UTC date. A technician starting at 06:00 had their clock-in filed
+ * under yesterday, and the day's list showed three punches out of four.
+ *
+ * It also disagreed with `bangkokDay()` in worktime.ts, which is what the
+ * attendance summary behind payroll uses — so the punches on screen and the
+ * days counted for pay could describe different things. Caught by a test that
+ * happened to run at 00:42 local.
+ */
 export async function entriesForDay(employeeId: string, day: Date) {
-  const start = new Date(
-    Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()),
-  );
+  // The Bangkok day the caller means, then that day's real span in UTC:
+  // 00:00 in Bangkok is 17:00 UTC the day before.
+  const [y, m, d] = bangkokDay(day).split('-').map(Number);
+  const start = new Date(Date.UTC(y!, m! - 1, d!) - BANGKOK_OFFSET_MS);
   const end = new Date(start.getTime() + 86_400_000);
 
   return prisma.timeClockEntry.findMany({

@@ -142,7 +142,11 @@ describe('punching', () => {
   });
 
   it('keeps the whole day in order', async () => {
-    const base = Date.now();
+    // Anchored to 08:00 Bangkok on a fixed date rather than to "now". Using
+    // Date.now() made the result depend on the hour the suite ran: at 00:42
+    // local the last punch landed nine hours later and the assertion turned on
+    // where a day boundary happened to fall.
+    const base = Date.UTC(2026, 5, 15, 1, 0, 0); // 08:00 ICT
     for (const hours of [0, 4, 5, 9]) {
       await punchClock({
         employeeId, token, at: OFFICE, accuracyMetres: 10,
@@ -152,6 +156,36 @@ describe('punching', () => {
 
     const entries = await entriesForDay(employeeId, new Date(base));
     expect(entries.map((e) => e.kind)).toEqual(['IN', 'OUT', 'IN', 'OUT']);
+  });
+
+  it('counts an early start as today, not as yesterday', async () => {
+    // The bug the test above found by accident. Bangkok is UTC+7, so 06:00
+    // local is 23:00 UTC the previous date. Slicing the day in UTC filed a
+    // technician's clock-in under yesterday and dropped it off today's list.
+    const earlyIct = Date.UTC(2026, 5, 20, 23, 0, 0); // 06:00 ICT on the 21st
+    await punchClock({
+      employeeId, token, at: OFFICE, accuracyMetres: 10,
+      now: new Date(earlyIct),
+    });
+
+    const onThe21st = await entriesForDay(employeeId, new Date(Date.UTC(2026, 5, 21, 5, 0, 0)));
+    expect(onThe21st).toHaveLength(1);
+
+    const onThe20th = await entriesForDay(employeeId, new Date(Date.UTC(2026, 5, 20, 5, 0, 0)));
+    expect(onThe20th).toHaveLength(0);
+  });
+
+  it('counts a late finish as the same day', async () => {
+    // The other edge: 23:30 local is 16:30 UTC the same date, so this one was
+    // already right — pinned so a "fix" cannot swing the window the other way.
+    const lateIct = Date.UTC(2026, 6, 10, 16, 30, 0); // 23:30 ICT on the 10th
+    await punchClock({
+      employeeId, token, at: OFFICE, accuracyMetres: 10,
+      now: new Date(lateIct),
+    });
+
+    const sameDay = await entriesForDay(employeeId, new Date(Date.UTC(2026, 6, 10, 5, 0, 0)));
+    expect(sameDay).toHaveLength(1);
   });
 
   it('stores what the phone reported', async () => {

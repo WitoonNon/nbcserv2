@@ -50,16 +50,32 @@ class ChartErrorBoundary extends Component<
   }
 }
 
+/**
+ * What is on screen while the plotting engine downloads.
+ *
+ * It used to be grey bars and nothing else, and QA read three or four seconds
+ * of that as a broken chart rather than a loading one — reasonably, because a
+ * chart with no axis and no labels is what a failed chart looks like. The bars
+ * are still there to hold the shape, and now something says why.
+ *
+ * The engine is 400KB gzipped and that is the floor for AntV; this cannot be
+ * made instant, so it is made legible instead.
+ */
 function Skeleton() {
   return (
-    <div className="h-full flex items-end gap-2 px-2 pb-6 pt-2" aria-hidden="true">
-      {[38, 62, 45, 78, 55, 88, 48].map((h, i) => (
-        <div
-          key={i}
-          className="flex-1 rounded-t-[2px] bg-[var(--color-surface-alt)] animate-pulse"
-          style={{ height: `${h}%`, animationDelay: `${i * 60}ms` }}
-        />
-      ))}
+    <div className="h-full flex flex-col">
+      <div className="flex-1 flex items-end gap-2 px-2 pt-2" aria-hidden="true">
+        {[38, 62, 45, 78, 55, 88, 48].map((h, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-t-[2px] bg-[var(--color-surface-alt)] animate-pulse"
+            style={{ height: `${h}%`, animationDelay: `${i * 60}ms` }}
+          />
+        ))}
+      </div>
+      <p className="text-center text-[12px] text-[var(--color-muted)] py-2" role="status">
+        กำลังโหลดกราฟ…
+      </p>
     </div>
   );
 }
@@ -72,12 +88,28 @@ function Skeleton() {
  * mounting immediately where IntersectionObserver is missing — an old browser
  * should get a slow chart, not no chart.
  */
-function WhenNearViewport({ children, className }: { children: ReactNode; className?: string }) {
+function WhenNearViewport({
+  children,
+  className,
+  eager = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** Skip the observer — for a chart that is on screen at first paint. */
+  eager?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     if (show) return;
+    // The first chart sits above the fold on every desktop screen, so waiting
+    // for the observer to fire only postpones a download that is certain to
+    // happen. Starting immediately removes a beat from the visible wait.
+    if (eager) {
+      setShow(true);
+      return;
+    }
     const el = ref.current;
     if (!el || typeof IntersectionObserver === 'undefined') {
       setShow(true);
@@ -94,7 +126,7 @@ function WhenNearViewport({ children, className }: { children: ReactNode; classN
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [show]);
+  }, [show, eager]);
 
   return (
     <div ref={ref} className={className}>
@@ -109,6 +141,7 @@ export function ChartFrame({
   action,
   height = 280,
   empty,
+  eager,
   children,
 }: {
   title: string;
@@ -117,6 +150,8 @@ export function ChartFrame({
   height?: number;
   /** Shown instead of the chart when there is nothing to plot. */
   empty?: string;
+  /** Load without waiting to scroll into view — for the chart at the top. */
+  eager?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -134,7 +169,9 @@ export function ChartFrame({
           </div>
         ) : (
           <ChartErrorBoundary>
-            <WhenNearViewport className="h-full">{children}</WhenNearViewport>
+            <WhenNearViewport className="h-full" eager={eager}>
+              {children}
+            </WhenNearViewport>
           </ChartErrorBoundary>
         )}
       </div>
