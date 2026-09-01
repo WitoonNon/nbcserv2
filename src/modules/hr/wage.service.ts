@@ -373,6 +373,102 @@ export async function recordWageChange(
 }
 
 /**
+ * Set a wage from the employee form, where there is no "effective from" box.
+ *
+ * The form has a wage field and used to write only `Employee.wageRate`. That
+ * column is the *current* rate for display; payroll reads the history, so a
+ * wage typed into the form saved cleanly, showed on the screen, and left the
+ * payroll run reporting "ยังไม่ได้บันทึกค่าแรง" for that person. The office
+ * would have entered ten salaries, seen ten confirmations, and found the run
+ * still blocked on all ten with nothing explaining why.
+ *
+ * So the form's wage becomes a history entry too:
+ *
+ *  - unchanged from what is already in force → nothing written, so re-saving a
+ *    record to fix a phone number does not litter the history with duplicates
+ *  - a change on a date that already has one → that row is replaced, because
+ *    two corrections on the same day are one decision being typed twice
+ *  - otherwise a new entry, effective from the hire date for somebody with no
+ *    wage yet, and from today for a change to an existing one
+ *
+ * Backdating to the hire date matters: a new joiner entered mid-month must be
+ * payable for the days already worked, and an entry effective today would
+ * leave those days with no rate at all.
+ */
+export async function setWageFromEmployeeForm(
+  params: {
+    employeeId: string;
+    wageRate: number;
+    employmentType: EmploymentType;
+    /** The person's hire date, used when they have no wage on record yet. */
+    hiredAt?: Date | null;
+  },
+  actor: { id: string; name: string },
+): Promise<'created' | 'replaced' | 'unchanged'> {
+  const existing = await prisma.employeeWageChange.findFirst({
+    where: { employeeId: params.employeeId },
+    orderBy: { effectiveFrom: 'desc' },
+    select: { id: true, effectiveFrom: true, wageRate: true, employmentType: true },
+  });
+
+  if (
+    existing &&
+    Number(existing.wageRate) === params.wageRate &&
+    existing.employmentType === params.employmentType
+  ) {
+    return 'unchanged';
+  }
+
+  const today = new Date();
+  const todayOnly = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
+  // First wage ever: backdate to the hire date so days already worked have one.
+  const effectiveFrom = existing ? todayOnly : (params.hiredAt ?? todayOnly);
+
+  const sameDay = await prisma.employeeWageChange.findUnique({
+    where: {
+      employeeId_effectiveFrom: { employeeId: params.employeeId, effectiveFrom },
+    },
+    select: { id: true },
+  });
+
+  if (sameDay) {
+    await prisma.$transaction(async (tx) => {
+      await tx.employeeWageChange.update({
+        where: { id: sameDay.id },
+        data: {
+          wageRate: new Prisma.Decimal(params.wageRate.toFixed(2)),
+          employmentType: params.employmentType,
+          recordedById: actor.id,
+          recordedByName: actor.name,
+        },
+      });
+      await tx.employee.update({
+        where: { id: params.employeeId },
+        data: {
+          wageRate: new Prisma.Decimal(params.wageRate.toFixed(2)),
+          employmentType: params.employmentType,
+        },
+      });
+    });
+    return 'replaced';
+  }
+
+  await recordWageChange(
+    {
+      employeeId: params.employeeId,
+      effectiveFrom: effectiveFrom.toISOString().slice(0, 10),
+      wageRate: params.wageRate,
+      employmentType: params.employmentType,
+      reason: existing ? null : 'ค่าแรงตั้งต้น — บันทึกจากหน้าข้อมูลพนักงาน',
+    },
+    actor,
+  );
+  return 'created';
+}
+
+/**
  * Remove an adjustment entered by mistake.
  *
  * Deleting rewrites history, so it is deliberately narrow: only the newest row

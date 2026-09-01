@@ -2,12 +2,13 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { prisma } from '../src/lib/db';
 import { createEmployee, type EmployeeInput } from '../src/modules/hr/employee.service';
 import {
-  recordWageChange,
-  wageAtDate,
-  wagesAtDate,
-  wageHistory,
-  deleteLatestWageChange,
   WageError,
+  deleteLatestWageChange,
+  recordWageChange,
+  setWageFromEmployeeForm,
+  wageAtDate,
+  wageHistory,
+  wagesAtDate,
 } from '../src/modules/hr/wage.service';
 
 /**
@@ -323,5 +324,87 @@ describe('the trail', () => {
       where: { employeeId, actorId: 'boss' },
     });
     expect(logged).toBeGreaterThan(0);
+  });
+});
+
+describe('a wage typed into the employee form', () => {
+  it('reaches the history, so payroll can actually see it', async () => {
+    // The trap this closes: the form wrote only Employee.wageRate, which is
+    // the display column. Payroll reads the history, so a salary saved here
+    // left the run reporting "ยังไม่ได้บันทึกค่าแรง" for somebody whose record
+    // clearly showed a salary.
+    expect(await wageAtDate(employeeId, new Date())).toBeNull();
+
+    await setWageFromEmployeeForm(
+      { employeeId, wageRate: 18_000, employmentType: 'MONTHLY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+
+    const now = await wageAtDate(employeeId, new Date());
+    expect(now).toEqual({ wageRate: 18_000, employmentType: 'MONTHLY' });
+  });
+
+  it('backdates the first wage to the hire date', async () => {
+    // A joiner entered mid-month must be payable for the days already worked.
+    await setWageFromEmployeeForm(
+      { employeeId, wageRate: 500, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+    expect((await wageAtDate(employeeId, d('2026-01-01')))!.wageRate).toBe(500);
+  });
+
+  it('writes nothing when the wage has not changed', async () => {
+    // Re-saving a record to correct a phone number must not litter the history.
+    await setWageFromEmployeeForm(
+      { employeeId, wageRate: 500, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+    const before = (await wageHistory(employeeId)).length;
+
+    const result = await setWageFromEmployeeForm(
+      { employeeId, wageRate: 500, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+
+    expect(result).toBe('unchanged');
+    expect((await wageHistory(employeeId)).length).toBe(before);
+  });
+
+  it('replaces rather than duplicates a second change on the same day', async () => {
+    await setWageFromEmployeeForm(
+      { employeeId, wageRate: 500, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+    await setWageFromEmployeeForm(
+      { employeeId, wageRate: 600, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+    // Typed 650 by mistake as 600, corrected the same afternoon.
+    const result = await setWageFromEmployeeForm(
+      { employeeId, wageRate: 650, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+
+    expect(result).toBe('replaced');
+    const today = (await wageHistory(employeeId)).filter(
+      (h) => h.effectiveFrom.slice(0, 10) === new Date().toISOString().slice(0, 10),
+    );
+    expect(today).toHaveLength(1);
+    expect(today[0]!.wageRate).toBe(650);
+    expect((await wageAtDate(employeeId, new Date()))!.wageRate).toBe(650);
+  });
+
+  it('keeps the earlier rate readable after a later change', async () => {
+    await setWageFromEmployeeForm(
+      { employeeId, wageRate: 500, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+    await setWageFromEmployeeForm(
+      { employeeId, wageRate: 700, employmentType: 'DAILY', hiredAt: d('2026-01-01') },
+      ACTOR,
+    );
+    // January was worked at 500 and must still say so.
+    expect((await wageAtDate(employeeId, d('2026-06-01')))!.wageRate).toBe(500);
+    expect((await wageAtDate(employeeId, new Date()))!.wageRate).toBe(700);
   });
 });

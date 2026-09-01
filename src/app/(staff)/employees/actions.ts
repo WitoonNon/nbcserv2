@@ -11,6 +11,8 @@ import {
   type EmployeeInput,
   type SensitiveFields,
 } from '@/modules/hr/employee.service';
+import { setWageFromEmployeeForm } from '@/modules/hr/wage.service';
+import { prisma } from '@/lib/db';
 import type { EmploymentType, EmployeeStatus } from '@/generated/prisma';
 
 export interface EmployeeFormState {
@@ -84,6 +86,27 @@ export async function saveEmployeeAction(
       await updateEmployee(id, input, actor);
     } else {
       newId = await createEmployee(input, actor);
+    }
+
+    // A wage typed here has to reach the history, not just Employee.wageRate.
+    // Payroll reads the history; without this the office fills in ten salaries,
+    // sees ten confirmations, and the run still reports every one of them as
+    // having no wage on record.
+    if (input.wageRate !== null && input.wageRate !== undefined) {
+      const employeeId = id || newId!;
+      const employee = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { hiredAt: true },
+      });
+      await setWageFromEmployeeForm(
+        {
+          employeeId,
+          wageRate: input.wageRate,
+          employmentType: input.employmentType,
+          hiredAt: employee?.hiredAt ?? null,
+        },
+        actor,
+      );
     }
   } catch (e) {
     if (e instanceof ForbiddenError || e instanceof EmployeeError) return { error: e.message };
