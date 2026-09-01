@@ -26,6 +26,9 @@ export type NavIconName =
   | 'assets'
   | 'workOrders'
   | 'employees'
+  | 'requests'
+  | 'clock'
+  | 'me'
   | 'timesheet'
   | 'payroll'
   | 'reports'
@@ -103,6 +106,31 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
       <circle cx="8.4" cy="10.6" r="2.1" />
       <path d="M5.2 16.2a3.4 3.4 0 0 1 6.4 0" />
       <path d="M14.6 10h4.2M14.6 14h2.8" />
+    </>
+  ),
+
+  // A form with a tick — a request that has been decided.
+  requests: (
+    <>
+      <rect x="4.4" y="2.8" width="15.2" height="18.4" rx="3" />
+      <path d="M8.6 8h6.8M8.6 12h4" />
+      <path d="m8.6 16.6 2 2 4-4" />
+    </>
+  ),
+
+  // A clock face with a hand raised to the hour — punching in.
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="M12 6.6V12l4 1.8" />
+    </>
+  ),
+
+  // A person, singular — this account, as opposed to the customers icon.
+  me: (
+    <>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M4.8 20.4a7.2 7.2 0 0 1 14.4 0" />
     </>
   ),
 
