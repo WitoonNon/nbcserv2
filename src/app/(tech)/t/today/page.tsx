@@ -8,6 +8,7 @@ import { dateOnly } from '@/modules/scheduling/quota.service';
 import { nextStepFor } from '@/modules/jobs/field-work.service';
 import { JobStepButton } from '@/components/tech/JobStepButton';
 import { OutboxIndicator } from '@/components/tech/OutboxIndicator';
+import { NavIcon } from '@/components/ui/NavIcon';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +79,7 @@ export default async function TechTodayPage() {
 
       {jobs?.length === 0 && (
         <div className="card p-8 text-center">
-          <p className="text-4xl mb-2">☀️</p>
+          <NavIcon name="empty" className="mx-auto size-12 text-[var(--color-muted)] mb-2" />
           <p className="text-sm text-[var(--color-muted)]">วันนี้ยังไม่มีงานที่จ่ายให้</p>
         </div>
       )}

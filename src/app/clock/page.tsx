@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/auth/guard';
 import { ClockPunch } from '@/components/hr/ClockPunch';
 import { entriesForDay } from '@/modules/hr/timeclock.service';
+import { NavIcon } from '@/components/ui/NavIcon';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,7 @@ export default async function ClockPage({
   if (!employee) {
     return shell(
       <div className="card p-5 text-center space-y-2">
-        <p className="text-4xl">🪪</p>
+        <NavIcon name="employees" className="mx-auto size-12 text-[var(--color-muted)]" />
         <p className="font-semibold">บัญชีนี้ยังไม่ได้ผูกกับทะเบียนพนักงาน</p>
         <p className="text-sm text-[var(--color-muted)]">
           แจ้งฝ่ายบุคคลให้เพิ่มชื่อคุณในทะเบียนพนักงานก่อน จึงจะลงเวลาได้
@@ -51,7 +52,7 @@ export default async function ClockPage({
     // button — the token only ever comes from the code on the wall.
     return shell(
       <div className="card p-5 text-center space-y-2">
-        <p className="text-4xl">📷</p>
+        <NavIcon name="camera" className="mx-auto size-12 text-[var(--color-muted)]" />
         <p className="font-semibold">สแกน QR ที่จุดลงเวลา</p>
         <p className="text-sm text-[var(--color-muted)]">
           เปิดกล้องมือถือแล้วส่องที่รหัส QR ตรงจุดลงเวลา หน้านี้จะเปิดขึ้นเอง

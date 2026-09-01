@@ -29,6 +29,12 @@ export type NavIconName =
   | 'requests'
   | 'clock'
   | 'me'
+  | 'camera'
+  | 'offline'
+  | 'empty'
+  | 'locked'
+  | 'success'
+  | 'warning'
   | 'timesheet'
   | 'payroll'
   | 'reports'
@@ -131,6 +137,56 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="8" r="3.6" />
       <path d="M4.8 20.4a7.2 7.2 0 0 1 14.4 0" />
+    </>
+  ),
+
+  // A camera — "point this at the code on the wall".
+  camera: (
+    <>
+      <path d="M3 8.6a2 2 0 0 1 2-2h2.3l1.3-2.2h6.8l1.3 2.2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+      <circle cx="12" cy="13" r="3.6" />
+    </>
+  ),
+
+  // A cloud struck through — the server could not be reached. Two arcs meant
+  // as a broken chain read as a squiggle at this size; a slash reads instantly.
+  offline: (
+    <>
+      <path d="M7.4 18.4h9.4a4 4 0 0 0 .5-8 5.6 5.6 0 0 0-10.6-1.4A3.9 3.9 0 0 0 7.4 18.4Z" />
+      <path d="M4 3.8 20.2 20.4" />
+    </>
+  ),
+
+  // An empty tray — nothing assigned, rather than something gone wrong.
+  empty: (
+    <>
+      <path d="M3.4 13.6h4.2l1.4 2.4h6l1.4-2.4h4.2" />
+      <path d="M3.4 13.6 6 5.2a1.6 1.6 0 0 1 1.5-1.1h9a1.6 1.6 0 0 1 1.5 1.1l2.6 8.4v4.6a1.8 1.8 0 0 1-1.8 1.8H5.2a1.8 1.8 0 0 1-1.8-1.8Z" />
+    </>
+  ),
+
+  locked: (
+    <>
+      <rect x="4.4" y="10.4" width="15.2" height="10.4" rx="2.4" />
+      <path d="M8 10.4V7.6a4 4 0 0 1 8 0v2.8" />
+      <circle cx="12" cy="15.6" r="1.3" />
+    </>
+  ),
+
+  success: (
+    <>
+      <circle cx="12" cy="12" r="8.8" />
+      <path d="m8 12.2 2.7 2.7L16 9.6" />
+    </>
+  ),
+
+  warning: (
+    <>
+      <path d="M12 3.6 21.2 19.2a1.4 1.4 0 0 1-1.2 2.1H4a1.4 1.4 0 0 1-1.2-2.1Z" />
+      <path d="M12 9.4v4.4" />
+      {/* The dot of the exclamation. A zero-radius circle rendered as a hollow
+          ring; a zero-length line with round caps is an actual dot. */}
+      <path d="M12 17.5v0.01" />
     </>
   ),
 

@@ -7,6 +7,7 @@ import { myOvertimeRequests } from '@/modules/hr/overtime.service';
 import { getLeavePolicy, leaveBalances, myLeaveRequests } from '@/modules/hr/leave.service';
 import { LEAVE_LABEL_TH } from '@/modules/hr/leave-rules';
 import { OVERTIME_LABEL_TH } from '@/modules/hr/payroll-rules';
+import { NavIcon } from '@/components/ui/NavIcon';
 import {
   CancelRequest,
   LeaveRequestForm,
@@ -57,7 +58,7 @@ export default async function MyRequestsPage() {
     return (
       <Shell>
         <div className="card p-5 text-center space-y-2">
-          <p className="text-4xl">🪪</p>
+          <NavIcon name="employees" className="mx-auto size-12 text-[var(--color-muted)]" />
           <p className="font-semibold">บัญชีนี้ยังไม่ได้ผูกกับทะเบียนพนักงาน</p>
           <p className="text-sm text-[var(--color-muted)]">
             แจ้งฝ่ายบุคคลให้เพิ่มชื่อคุณในทะเบียนพนักงานก่อน จึงจะยื่นคำขอได้
@@ -83,7 +84,7 @@ export default async function MyRequestsPage() {
     return (
       <Shell>
         <div className="card p-5 text-center space-y-2">
-          <p className="text-4xl">🔌</p>
+          <NavIcon name="offline" className="mx-auto size-12 text-[var(--color-muted)]" />
           <p className="font-semibold">ยังเชื่อมต่อฐานข้อมูลไม่ได้</p>
           <p className="text-sm text-[var(--color-muted)]">
             ลองใหม่อีกครั้งในอีกสักครู่ · ถ้ายังไม่ได้ให้แจ้งออฟฟิศ

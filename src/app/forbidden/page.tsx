@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/auth/session';
 import { homeFor } from '@/lib/auth/guard';
+import { NavIcon } from '@/components/ui/NavIcon';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,7 @@ export default async function ForbiddenPage() {
   return (
     <div className="min-h-screen grid place-items-center p-6">
       <div className="card p-8 max-w-md text-center">
-        <p className="text-4xl mb-3">🔒</p>
+        <NavIcon name="locked" className="mx-auto size-12 text-[var(--color-muted)] mb-3" />
         <h1 className="text-xl">ไม่มีสิทธิ์เข้าถึงส่วนนี้</h1>
         <p className="text-sm text-[var(--color-muted)] mt-2">
           บัญชีของคุณไม่มีสิทธิ์ใช้งานหน้านี้ หากคิดว่าเป็นความผิดพลาด

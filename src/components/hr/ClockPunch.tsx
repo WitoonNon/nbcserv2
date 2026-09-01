@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { NavIcon } from '@/components/ui/NavIcon';
 
 /**
  * What an employee sees after scanning the code on the wall.
@@ -120,7 +121,14 @@ export function ClockPunch({ token, employeeName }: { token: string; employeeNam
               : 'bg-green-50 border-green-300'
           }`}
         >
-          <p className="text-5xl mb-2">{result.needsReview ? '⚠️' : '✅'}</p>
+          <NavIcon
+              name={result.needsReview ? 'warning' : 'success'}
+              className={`mx-auto size-14 mb-2 ${
+                result.needsReview
+                  ? 'text-[var(--color-brand-orange-600)]'
+                  : 'text-[#16a34a]'
+              }`}
+            />
           <p className="text-2xl font-semibold">
             {result.kind === 'IN' ? 'บันทึกเวลาเข้างานแล้ว' : 'บันทึกเวลาออกงานแล้ว'}
           </p>
