@@ -134,7 +134,7 @@ export async function query<T>(statement: Sql, opts: QueryOptions = {}): Promise
   const started = performance.now();
 
   let rows: T[];
-  try {
+  try {ไ
     rows = await runner.$queryRaw<T[]>(statement);
   } catch (e) {
     // The statement text is safe to log; the bind values are not, and Prisma

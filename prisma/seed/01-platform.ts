@@ -273,13 +273,34 @@ const CONFIG: {
   },
 ];
 
+/**
+ * What is in this build and what is not — a scope list, not a control panel.
+ *
+ * These were written as switches and never wired to anything: no feature has
+ * ever checked one before running. The proof was `feature.lineNotifications`
+ * sitting at `false` while LINE had been delivering real messages since
+ * 25 ส.ค. A switch that reads "off" for something that is on is worse than no
+ * switch, because somebody eventually trusts it.
+ *
+ * They are useful as a statement of scope — invoicing and parts stock are
+ * genuinely out of this phase and the client asks about both — so the screen
+ * now renders them as status, with no button. `enabled` means "this build
+ * does it", which is a fact about the code and belongs in the code.
+ *
+ * If a real kill switch is ever wanted, it needs the feature to consult it and
+ * a test proving the off state actually stops the work. Until then, nothing
+ * here should look pressable.
+ */
 const FLAGS = [
-  { key: 'feature.assetRegistry', enabled: true, description: 'ทะเบียนเครื่องปรับอากาศรายเครื่อง' },
-  { key: 'feature.pmAutoSchedule', enabled: true, description: 'นัด PM ครั้งถัดไปอัตโนมัติตามรอบ 2/3/4 ครั้งต่อปี' },
-  { key: 'feature.lineNotifications', enabled: false, description: 'แจ้งเตือนผ่าน LINE — รอสิทธิ์ Messaging API ของ @nbcservice' },
-  { key: 'feature.invoicing', enabled: false, description: 'ออกใบแจ้งหนี้/e-Tax — นอกขอบเขตเฟสนี้ ส่งต่อฝ่ายบัญชี' },
-  { key: 'feature.partsInventory', enabled: false, description: 'สต๊อกอะไหล่ในรถช่าง — นอกขอบเขตเฟสนี้ บันทึกการใช้อะไหล่อย่างเดียว' },
-  { key: 'feature.customerPortal', enabled: true, description: 'พอร์ทัลลูกค้า จองคิวและติดตามงาน' },
+  { key: 'feature.assetRegistry', enabled: true, description: 'ทะเบียนเครื่องปรับอากาศรายเครื่อง — ใช้งานได้' },
+  { key: 'feature.pmAutoSchedule', enabled: true, description: 'เสนอนัด PM อัตโนมัติจากวันครบกำหนดในทะเบียนเครื่อง — ใช้งานได้' },
+  // Corrected 31 ส.ค.: live since 25 ส.ค., sending to the real @nbcservice account.
+  { key: 'feature.lineNotifications', enabled: true, description: 'แจ้งเตือนผ่าน LINE — ใช้งานได้ ส่งเข้าไลน์จริงแล้ว' },
+  { key: 'feature.timeClock', enabled: true, description: 'ลงเวลาเข้า-ออกด้วย QR + ตรวจพิกัด — ใช้งานได้' },
+  { key: 'feature.payroll', enabled: true, description: 'โอที ลา และสรุปเงินเดือน — ใช้งานได้' },
+  { key: 'feature.customerPortal', enabled: true, description: 'พอร์ทัลลูกค้า จองคิวและติดตามงาน — ใช้งานได้' },
+  { key: 'feature.invoicing', enabled: false, description: 'ออกใบแจ้งหนี้/e-Tax — ไม่รวมในขอบเขตงาน ส่งต่อฝ่ายบัญชี' },
+  { key: 'feature.partsInventory', enabled: false, description: 'สต๊อกอะไหล่ในรถช่าง — ไม่รวมในขอบเขตงาน บันทึกการใช้อะไหล่อย่างเดียว' },
 ];
 
 /** Document number formats. NBC-{FORM}-{ปี พ.ศ.}-{ลำดับ 5 หลัก} */
