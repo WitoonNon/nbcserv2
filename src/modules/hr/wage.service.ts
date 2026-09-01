@@ -115,6 +115,110 @@ export async function wagesAtDate(
   );
 }
 
+export interface PeriodWageSegment {
+  /** First day of the period this rate covered, inclusive. */
+  from: Date;
+  /** Last day it covered, inclusive. */
+  to: Date;
+  calendarDays: number;
+  wageRate: number;
+  employmentType: EmploymentType;
+}
+
+const DAY_MS = 86_400_000;
+
+function daysInclusive(from: Date, to: Date): number {
+  return Math.floor((to.getTime() - from.getTime()) / DAY_MS) + 1;
+}
+
+/**
+ * The period cut into stretches where the wage did not change.
+ *
+ * `wagesAtDate` answers "the rate on one day", which is the right question for
+ * a period that had a single rate throughout and the wrong one for a period
+ * containing a raise. Asking it with the period's last day — which is what
+ * payroll did — prices the days before the raise at the rate that replaced
+ * them.
+ *
+ * Returns an empty list for anybody with no rate on record at all. Payroll
+ * must read that as "cannot compute", exactly as it reads a missing entry from
+ * `wagesAtDate`, and never as zero.
+ */
+export async function wageSegmentsInPeriod(
+  employeeIds: string[],
+  from: Date,
+  to: Date,
+): Promise<Map<string, PeriodWageSegment[]>> {
+  const out = new Map<string, PeriodWageSegment[]>();
+  if (employeeIds.length === 0) return out;
+
+  // The rate each person was already on when the period opened.
+  const opening = await wagesAtDate(employeeIds, from);
+
+  // Every change landing inside the period, in order.
+  const changes = await prisma.employeeWageChange.findMany({
+    where: {
+      employeeId: { in: employeeIds },
+      effectiveFrom: { gt: from, lte: to },
+    },
+    orderBy: [{ employeeId: 'asc' }, { effectiveFrom: 'asc' }],
+    select: { employeeId: true, effectiveFrom: true, wageRate: true, employmentType: true },
+  });
+
+  const changesByEmployee = new Map<string, typeof changes>();
+  for (const c of changes) {
+    const list = changesByEmployee.get(c.employeeId) ?? [];
+    list.push(c);
+    changesByEmployee.set(c.employeeId, list);
+  }
+
+  for (const id of employeeIds) {
+    const mid = changesByEmployee.get(id) ?? [];
+    const start = opening.get(id);
+
+    // Nothing before the period and nothing during it: no rate on record.
+    if (!start && mid.length === 0) continue;
+
+    const segments: PeriodWageSegment[] = [];
+    let cursor = from;
+    let current = start ?? null;
+
+    for (const change of mid) {
+      if (current) {
+        const segTo = new Date(change.effectiveFrom.getTime() - DAY_MS);
+        if (segTo >= cursor) {
+          segments.push({
+            from: cursor,
+            to: segTo,
+            calendarDays: daysInclusive(cursor, segTo),
+            wageRate: current.wageRate,
+            employmentType: current.employmentType,
+          });
+        }
+      }
+      cursor = change.effectiveFrom;
+      current = {
+        wageRate: Number(change.wageRate),
+        employmentType: change.employmentType,
+      };
+    }
+
+    if (current && to >= cursor) {
+      segments.push({
+        from: cursor,
+        to,
+        calendarDays: daysInclusive(cursor, to),
+        wageRate: current.wageRate,
+        employmentType: current.employmentType,
+      });
+    }
+
+    if (segments.length > 0) out.set(id, segments);
+  }
+
+  return out;
+}
+
 /**
  * The personal overtime rates in force on a day — ใบเสนอราคาข้อ 5.
  *

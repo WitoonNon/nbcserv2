@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db';
 import type { Prisma } from '@/generated/prisma';
-import { wagesAtDate } from './wage.service';
+import { wagesAtDate, wageSegmentsInPeriod } from './wage.service';
 import { approvedOvertimeInPeriod } from './overtime.service';
 import { approvedLeaveInPeriod } from './leave.service';
 import { attendanceInPeriod } from './timeclock.service';
@@ -106,7 +106,18 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
   const ids = staff.map((s) => s.id);
 
   // The rate in force during the period, not today's — see wage.service.
-  const wages = await wagesAtDate(ids, period.to);
+  //
+  // Two readings, because they answer different questions. `wages` is the rate
+  // at the end of the period: what the line reports as the person's rate, and
+  // what overtime is priced from. `segments` is the period cut where the wage
+  // changed, so days before a mid-period raise are paid at the rate that was
+  // actually in force on them.
+  const [wages, segmentsByEmployee] = await Promise.all([
+    wagesAtDate(ids, period.to),
+    wageSegmentsInPeriod(ids, period.from, period.to),
+  ]);
+  const periodDays =
+    Math.floor((period.to.getTime() - period.from.getTime()) / 86_400_000) + 1;
   const overtime = await approvedOvertimeInPeriod(period.from, period.to);
   const leave = await approvedLeaveInPeriod(period.from, period.to);
   const attendance = await attendanceInPeriod(ids, period.from, period.to);
@@ -199,8 +210,22 @@ export async function calculatePeriod(periodId: string): Promise<CalculationSumm
 
     const absentDays = seen ? Math.max(0, expectedDays - seen.daysPresent) : 0;
 
+    // Days worked are split across the wage segments in proportion to the
+    // calendar days each covered. The clock records which day each punch fell
+    // on, but a day worked is not tied to a rate until it is priced, and
+    // apportioning is what the ratio of days actually means for a period that
+    // was worked evenly. A period with one rate collapses to the single
+    // segment and the arithmetic is unchanged.
+    const segments = segmentsByEmployee.get(employee.id) ?? [];
     const slip = buildPayslip({
       basis,
+      segments: segments.map((seg) => ({
+        wageRate: seg.wageRate,
+        employmentType: seg.employmentType,
+        calendarDays: seg.calendarDays,
+        daysWorked: (daysWorked * seg.calendarDays) / periodDays,
+      })),
+      periodDays,
       daysWorked,
       unpaidLeaveDays: taken.unpaid,
       overtime: lines,

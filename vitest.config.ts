@@ -37,8 +37,16 @@ export default defineConfig({
     testTimeout: 30_000,
     // Setup and teardown open their own connections to a hosted database in
     // another region. The 10s default is a network-latency tripwire, not a
-    // signal that anything is wrong, so it matches testTimeout.
-    hookTimeout: 30_000,
+    // signal that anything is wrong.
+    //
+    // Longer than testTimeout on purpose. A `beforeAll` may seed a whole
+    // fixture — scheduling.pm.test.ts materialises ninety days of quota
+    // buckets — which is one slow write loop against Singapore, not a hung
+    // test. At 30s that file failed its hook and its thirteen tests were
+    // reported as skipped, so the PM planner had no passing coverage at all
+    // while the suite still looked mostly green. A hook timeout that fires on
+    // latency does not protect anything; it just hides a file.
+    hookTimeout: 180_000,
     // .tsx files are component tests. They opt into jsdom with a
     // `@vitest-environment jsdom` docblock rather than switching the default,
     // because every other test talks to Postgres and gains nothing from a DOM.

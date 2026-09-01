@@ -27,9 +27,9 @@ import { toBaht } from '../src/modules/hr/payroll-rules';
  * racing for the last paid leave day, a closed period being quietly
  * recalculated, and somebody with no wage on record vanishing from the run.
  *
- * ⚠️ NOT YET RUN. Written while the development database was unreachable —
- * the Supabase project the local .env pointed at no longer resolves.
- * Typecheck and build pass; this file is what still needs a database.
+ * Run against a real database on 31 ส.ค. 2569. The fixtures below were
+ * originally pinned to September 2026 and could not pass — see the note on
+ * PERIOD.
  */
 
 const CODE_PREFIX = 'EMP-PAY-';
@@ -38,10 +38,44 @@ let dailyId: string;
 let noWageId: string;
 let actorId: string;
 
+/**
+ * The period under test is always the calendar month that has just ended.
+ *
+ * Fixed dates were used here originally and the file could not pass: every
+ * overtime date sat in the future, and requestOvertime refuses anything more
+ * than a day ahead because overtime is worked, not planned. A payroll suite
+ * pinned to September 2026 is only correct during September 2026, which is a
+ * property no test should have.
+ *
+ * Anchoring to last month also matches what a payroll run actually is — a
+ * period that has finished — so the fixtures exercise the real case rather
+ * than a hypothetical future one.
+ */
+const NOW = new Date();
+const PERIOD_YEAR = NOW.getUTCMonth() === 0 ? NOW.getUTCFullYear() - 1 : NOW.getUTCFullYear();
+const PERIOD_MONTH = NOW.getUTCMonth() === 0 ? 11 : NOW.getUTCMonth() - 1;
+
+/** Day `d` of the period month, as a UTC calendar date. */
+function periodDay(d: number): Date {
+  return new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH, d));
+}
+/** Day `d` of the period month, as 'YYYY-MM-DD'. */
+function periodDayIso(d: number): string {
+  return periodDay(d).toISOString().slice(0, 10);
+}
+/** Last calendar day of the period month. */
+const PERIOD_LAST_DAY = new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH + 1, 0)).getUTCDate();
+/** Buddhist-era period code, e.g. '2569-08'. openPeriod enforces YYYY-MM. */
+function periodCode(offsetMonths = 0): string {
+  const d = new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH + offsetMonths, 1));
+  return `${d.getUTCFullYear() + 543}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+const PERIOD_CODE = periodCode();
+
 const PERIOD = {
-  code: '2569-09',
-  from: new Date(Date.UTC(2026, 8, 1)),
-  to: new Date(Date.UTC(2026, 8, 30)),
+  code: PERIOD_CODE,
+  from: periodDay(1),
+  to: periodDay(PERIOD_LAST_DAY),
 };
 
 async function makeEmployee(over: Record<string, unknown> = {}) {
@@ -110,7 +144,7 @@ describe('asking for overtime', () => {
   it('records a request with a reason', async () => {
     const request = await requestOvertime({
       employeeId: monthlyId,
-      workDate: '2026-09-10',
+      workDate: periodDayIso(10),
       kind: 'WORKDAY_OT',
       hours: 3,
       reason: 'ปิดงานลูกค้าโรงแรม',
@@ -122,7 +156,7 @@ describe('asking for overtime', () => {
     // "Why" is the only thing an approver has to go on.
     await expect(
       requestOvertime({
-        employeeId: monthlyId, workDate: '2026-09-10',
+        employeeId: monthlyId, workDate: periodDayIso(10),
         kind: 'WORKDAY_OT', hours: 3, reason: '   ',
       }),
     ).rejects.toBeInstanceOf(OvertimeError);
@@ -131,7 +165,7 @@ describe('asking for overtime', () => {
   it('refuses more hours than a day holds', async () => {
     await expect(
       requestOvertime({
-        employeeId: monthlyId, workDate: '2026-09-10',
+        employeeId: monthlyId, workDate: periodDayIso(10),
         kind: 'WORKDAY_OT', hours: 20, reason: 'พิมพ์ผิด',
       }),
     ).rejects.toBeInstanceOf(OvertimeError);
@@ -141,7 +175,7 @@ describe('asking for overtime', () => {
 describe('deciding on overtime', () => {
   async function pending() {
     return requestOvertime({
-      employeeId: monthlyId, workDate: '2026-09-10',
+      employeeId: monthlyId, workDate: periodDayIso(10),
       kind: 'WORKDAY_OT', hours: 2, reason: 'งานด่วน',
     });
   }
@@ -203,7 +237,7 @@ describe('leave', () => {
   it('splits paid from unpaid at approval', async () => {
     const request = await requestLeave({
       employeeId: monthlyId, type: 'SICK',
-      fromDate: '2026-09-07', toDate: '2026-09-09', reason: 'ไข้หวัด',
+      fromDate: periodDayIso(7), toDate: periodDayIso(9), reason: 'ไข้หวัด',
     });
 
     const split = await approveLeave({ requestId: request.id, deciderId: actorId });
@@ -216,18 +250,18 @@ describe('leave', () => {
     await prisma.leaveRequest.create({
       data: {
         employeeId: monthlyId, type: 'SICK',
-        fromDate: new Date(Date.UTC(2026, 0, 5)), toDate: new Date(Date.UTC(2026, 0, 18)),
+        fromDate: new Date(Date.UTC(PERIOD_YEAR, 0, 5)), toDate: new Date(Date.UTC(PERIOD_YEAR, 0, 18)),
         reason: 'ป่วยยาว', status: 'APPROVED', totalDays: 14, paidDays: 14, unpaidDays: 0,
       },
     });
 
     const first = await requestLeave({
       employeeId: monthlyId, type: 'SICK',
-      fromDate: '2026-09-07', toDate: '2026-09-08', reason: 'ป่วย',
+      fromDate: periodDayIso(7), toDate: periodDayIso(8), reason: 'ป่วย',
     });
     const second = await requestLeave({
       employeeId: monthlyId, type: 'SICK',
-      fromDate: '2026-09-10', toDate: '2026-09-11', reason: 'ป่วยอีก',
+      fromDate: periodDayIso(10), toDate: periodDayIso(11), reason: 'ป่วยอีก',
     });
 
     const a = await approveLeave({ requestId: first.id, deciderId: actorId });
@@ -244,7 +278,7 @@ describe('leave', () => {
   it('makes a daily worker\'s sick leave unpaid, per the client\'s policy', async () => {
     const request = await requestLeave({
       employeeId: dailyId, type: 'SICK',
-      fromDate: '2026-09-07', toDate: '2026-09-08', reason: 'ป่วย',
+      fromDate: periodDayIso(7), toDate: periodDayIso(8), reason: 'ป่วย',
     });
 
     const split = await approveLeave({ requestId: request.id, deciderId: actorId });
@@ -256,7 +290,7 @@ describe('leave', () => {
     await expect(
       requestLeave({
         employeeId: monthlyId, type: 'SICK',
-        fromDate: '2026-09-10', toDate: '2026-09-07', reason: 'ป่วย',
+        fromDate: periodDayIso(10), toDate: periodDayIso(7), reason: 'ป่วย',
       }),
     ).rejects.toBeInstanceOf(LeaveError);
   });
@@ -271,7 +305,7 @@ describe('running payroll', () => {
 
   it('pays a monthly salary with approved overtime on top', async () => {
     const ot = await requestOvertime({
-      employeeId: monthlyId, workDate: '2026-09-10',
+      employeeId: monthlyId, workDate: periodDayIso(10),
       kind: 'WORKDAY_OT', hours: 10, reason: 'งานเร่ง',
     });
     await approveOvertime({ requestId: ot.id, deciderId: actorId });
@@ -311,7 +345,7 @@ describe('running payroll', () => {
   it('uses the wage in force during the period, not today\'s', async () => {
     // A raise in October must not change what September was worth.
     await recordWageChange(
-      { employeeId: monthlyId, effectiveFrom: '2026-10-01', wageRate: 25_000, employmentType: 'MONTHLY' },
+      { employeeId: monthlyId, effectiveFrom: new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH + 1, 1)).toISOString().slice(0, 10), wageRate: 25_000, employmentType: 'MONTHLY' },
       { id: actorId, name: 'ผู้ดูแลระบบ' },
     );
 
@@ -320,6 +354,45 @@ describe('running payroll', () => {
       where: { periodId_employeeId: { periodId: period.id, employeeId: monthlyId } },
     });
     expect(Number(line.wageRate)).toBe(18_000);
+  });
+
+  it('apportions a raise that takes effect inside the period', async () => {
+    // The case the after-period test above does not reach. Raised on the 15th,
+    // the days before it were being paid at the new rate — the whole month at
+    // 30,000 instead of a fortnight of each.
+    await recordWageChange(
+      {
+        employeeId: monthlyId,
+        effectiveFrom: periodDayIso(15),
+        wageRate: 30_000,
+        employmentType: 'MONTHLY',
+      },
+      { id: actorId, name: 'ผู้ดูแลระบบ' },
+    );
+
+    const { period } = await calculated();
+    const line = await prisma.payrollLine.findUniqueOrThrow({
+      where: { periodId_employeeId: { periodId: period.id, employeeId: monthlyId } },
+    });
+
+    const before = 14;
+    const after = PERIOD_LAST_DAY - before;
+    const expected = 18_000 * (before / PERIOD_LAST_DAY) + 30_000 * (after / PERIOD_LAST_DAY);
+
+    expect(toBaht(line.baseSatang)).toBeCloseTo(expected, 0);
+    // The thing that was actually wrong: a full month at the new rate.
+    expect(toBaht(line.baseSatang)).toBeLessThan(30_000);
+    // And not a full month at the old one either.
+    expect(toBaht(line.baseSatang)).toBeGreaterThan(18_000);
+  });
+
+  it('is unchanged when the wage held steady all period', async () => {
+    // The ordinary case, guarded so apportioning cannot drift it.
+    const { period } = await calculated();
+    const line = await prisma.payrollLine.findUniqueOrThrow({
+      where: { periodId_employeeId: { periodId: period.id, employeeId: monthlyId } },
+    });
+    expect(toBaht(line.baseSatang)).toBe(18_000);
   });
 });
 
@@ -357,7 +430,7 @@ describe('closing the period', () => {
 
   it('stamps overtime so a later run cannot pay it again', async () => {
     const ot = await requestOvertime({
-      employeeId: monthlyId, workDate: '2026-09-10',
+      employeeId: monthlyId, workDate: periodDayIso(10),
       kind: 'WORKDAY_OT', hours: 4, reason: 'งานเร่ง',
     });
     await approveOvertime({ requestId: ot.id, deciderId: actorId });
@@ -371,9 +444,9 @@ describe('closing the period', () => {
 
     // A second period covering the same days finds nothing left to pay.
     const next = await openPeriod({
-      code: '2569-10',
-      from: new Date(Date.UTC(2026, 8, 1)),
-      to: new Date(Date.UTC(2026, 9, 31)),
+      code: periodCode(1),
+      from: periodDay(1),
+      to: new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH + 2, 0)),
     });
     await calculatePeriod(next.id);
     const secondLine = await prisma.payrollLine.findUniqueOrThrow({

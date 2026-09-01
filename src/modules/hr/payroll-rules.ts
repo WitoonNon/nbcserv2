@@ -178,8 +178,102 @@ export function basePaySatang(input: BasePayInput): number {
   return Math.max(0, monthly - deduction);
 }
 
+/**
+ * One stretch of the period during which the wage did not change.
+ *
+ * Payroll used to resolve a single rate for a whole period, taken on its last
+ * day. That is right for the common case — a raise entered in October must not
+ * reprice a September run — and wrong for a raise that takes effect *inside*
+ * the period, which was then applied to the days before it as well.
+ *
+ * On an 18,000 salary raised to 30,000 on the 15th of a 30-day month, the
+ * whole month was paid at 30,000: about 5,600 baht of overpayment, per person,
+ * per mid-period raise, with nothing on the payslip to show it.
+ */
+export interface WageSegment {
+  wageRate: number;
+  employmentType: EmploymentType;
+  /** Calendar days of the period this rate covered. */
+  calendarDays: number;
+  /** Days actually worked within it. Daily staff only. */
+  daysWorked: number;
+}
+
+export interface SegmentedBasePayInput {
+  segments: WageSegment[];
+  /** Calendar days in the whole period — the denominator for a monthly share. */
+  periodDays: number;
+  unpaidLeaveDays: number;
+}
+
+/**
+ * Base pay across a period whose wage may have changed part-way through.
+ *
+ * Daily staff are paid each day at the rate in force that day. Monthly staff
+ * have the salary apportioned by how much of the period each rate covered, so
+ * a full period on one rate still pays exactly that rate and nothing is
+ * introduced for the ordinary case.
+ *
+ * Unpaid leave is deducted at the period's weighted daily rate rather than at
+ * one segment's. The system records how many unpaid days were taken, not which
+ * calendar days they fell on, so attributing them to a segment would be a
+ * guess — and a guess that changes someone's pay depending on which way it
+ * went. The weighted rate is the honest reading of what is known.
+ */
+export function segmentedBasePaySatang(input: SegmentedBasePayInput): number {
+  const { segments, periodDays, unpaidLeaveDays } = input;
+  if (segments.length === 0) throw new PayrollRuleError('ไม่มีข้อมูลค่าแรงในงวดนี้');
+  if (periodDays <= 0) throw new PayrollRuleError('ช่วงเวลาของงวดไม่ถูกต้อง');
+
+  for (const seg of segments) {
+    if (!Number.isFinite(seg.wageRate) || seg.wageRate < 0) {
+      throw new PayrollRuleError('ค่าแรงไม่ถูกต้อง');
+    }
+    if (seg.daysWorked < 0) throw new PayrollRuleError('จำนวนวันทำงานติดลบไม่ได้');
+  }
+
+  const daily = segments.filter((s) => s.employmentType === 'DAILY');
+  if (daily.length === segments.length) {
+    // No unpaid-leave deduction: a daily-rate employee who did not work simply
+    // has no day to be paid for.
+    return Math.round(
+      segments.reduce((sum, s) => sum + toSatang(s.wageRate) * s.daysWorked, 0),
+    );
+  }
+
+  // Mixed daily/monthly inside one period would mean the employment type
+  // changed part-way through. Each segment is still paid on its own terms.
+  let earned = 0;
+  for (const seg of segments) {
+    if (seg.employmentType === 'DAILY') {
+      earned += toSatang(seg.wageRate) * seg.daysWorked;
+    } else {
+      earned += (toSatang(seg.wageRate) * seg.calendarDays) / periodDays;
+    }
+  }
+
+  // Weighted daily rate for the deduction — see the note above.
+  const weightedMonthly = segments
+    .filter((s) => s.employmentType === 'MONTHLY')
+    .reduce((sum, s) => sum + (toSatang(s.wageRate) * s.calendarDays) / periodDays, 0);
+  const perDay = weightedMonthly / MONTHLY_DIVISOR_DAYS;
+  const deduction = perDay * Math.max(0, unpaidLeaveDays);
+
+  // Never negative: a period of unpaid leave zeroes the pay, it does not
+  // invoice the employee.
+  return Math.max(0, Math.round(earned - deduction));
+}
+
 export interface PayslipInput {
   basis: WageBasis;
+  /**
+   * The period split by wage changes. When absent, `basis` and `daysWorked`
+   * are used as a single segment — the shape every caller had before
+   * mid-period raises were handled.
+   */
+  segments?: WageSegment[];
+  /** Calendar days in the period. Required alongside `segments`. */
+  periodDays?: number;
   daysWorked: number;
   unpaidLeaveDays: number;
   overtime: OvertimeLine[];
@@ -213,7 +307,14 @@ export interface Payslip {
  * must say so, or the employee reads it as what lands in their account.
  */
 export function buildPayslip(input: PayslipInput): Payslip {
-  const baseSatang = basePaySatang(input);
+  const baseSatang =
+    input.segments && input.segments.length > 0 && input.periodDays
+      ? segmentedBasePaySatang({
+          segments: input.segments,
+          periodDays: input.periodDays,
+          unpaidLeaveDays: input.unpaidLeaveDays,
+        })
+      : basePaySatang(input);
 
   const overtime = input.overtime.map((line) => overtimeAmount(input.basis, line));
   const overtimeSatang = overtime.reduce((sum, line) => sum + line.amountSatang, 0);

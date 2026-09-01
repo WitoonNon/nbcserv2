@@ -87,8 +87,38 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-const OT = { workDate: '2026-09-10', kind: 'WORKDAY_OT' as const, hours: 3, reason: 'ปิดงานลูกค้า' };
-const LEAVE = { type: 'SICK' as const, fromDate: '2026-09-10', toDate: '2026-09-11', reason: 'ไข้หวัด' };
+/**
+ * Dates are relative to the month that has just ended, not fixed.
+ *
+ * requestOvertime refuses a date more than a day ahead — overtime is worked,
+ * not planned — so a fixture pinned to a future month can never be created,
+ * and these tests failed for that reason rather than for anything they were
+ * checking. Anchoring to last month also matches the real case: somebody
+ * files for overtime they have already done.
+ */
+const NOW = new Date();
+const PERIOD_YEAR = NOW.getUTCMonth() === 0 ? NOW.getUTCFullYear() - 1 : NOW.getUTCFullYear();
+const PERIOD_MONTH = NOW.getUTCMonth() === 0 ? 11 : NOW.getUTCMonth() - 1;
+
+function periodDay(d: number): Date {
+  return new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH, d));
+}
+function periodDayIso(d: number): string {
+  return periodDay(d).toISOString().slice(0, 10);
+}
+
+const OT = {
+  workDate: periodDayIso(10),
+  kind: 'WORKDAY_OT' as const,
+  hours: 3,
+  reason: 'ปิดงานลูกค้า',
+};
+const LEAVE = {
+  type: 'SICK' as const,
+  fromDate: periodDayIso(10),
+  toDate: periodDayIso(11),
+  reason: 'ไข้หวัด',
+};
 
 describe('withdrawing your own leave request', () => {
   it('cancels a pending request instead of deleting it', async () => {
@@ -177,17 +207,17 @@ describe('reading back your own requests', () => {
 
   it('puts the newest first', async () => {
     await requestLeave({ employeeId: meId, ...LEAVE, fromDate: '2026-03-01', toDate: '2026-03-01' });
-    await requestLeave({ employeeId: meId, ...LEAVE, fromDate: '2026-09-01', toDate: '2026-09-01' });
+    await requestLeave({ employeeId: meId, ...LEAVE, fromDate: periodDayIso(1), toDate: periodDayIso(1) });
 
     const mine = await myLeaveRequests(meId);
-    expect(mine[0]!.fromDate.toISOString().slice(0, 10)).toBe('2026-09-01');
+    expect(mine[0]!.fromDate.toISOString().slice(0, 10)).toBe(periodDayIso(1));
   });
 });
 
 describe('the balance shown before you ask', () => {
   it('matches the configured entitlement for a monthly employee', async () => {
     const policy = await getLeavePolicy();
-    const balances = await leaveBalances(meId, new Date(Date.UTC(2026, 8, 1)));
+    const balances = await leaveBalances(meId, periodDay(1));
 
     for (const balance of balances) {
       expect(balance.entitlementDays).toBe(entitlementDays(policy, balance.type, 'MONTHLY'));
@@ -198,7 +228,7 @@ describe('the balance shown before you ask', () => {
 
   it("applies the client's monthly-staff-only restriction on sick leave", async () => {
     const policy = await getLeavePolicy();
-    const balances = await leaveBalances(dailyId, new Date(Date.UTC(2026, 8, 1)));
+    const balances = await leaveBalances(dailyId, periodDay(1));
     const sick = balances.find((b) => b.type === 'SICK')!;
 
     // Not the law's distinction — the client's. Asserted against the policy
@@ -208,7 +238,7 @@ describe('the balance shown before you ask', () => {
 
   it('deducts days only once a request is approved', async () => {
     const request = await requestLeave({ employeeId: meId, ...LEAVE });
-    const on = new Date(Date.UTC(2026, 8, 1));
+    const on = periodDay(1);
 
     const pending = (await leaveBalances(meId, on)).find((b) => b.type === 'SICK')!;
     // An undecided request has consumed nothing yet — reserving against it
@@ -231,7 +261,7 @@ describe('the balance shown before you ask', () => {
     });
     await approveLeave({ requestId: request.id, deciderId: actorId });
 
-    const thisYear = (await leaveBalances(meId, new Date(Date.UTC(2026, 8, 1)))).find(
+    const thisYear = (await leaveBalances(meId, periodDay(1))).find(
       (b) => b.type === 'SICK',
     )!;
     const lastYear = (await leaveBalances(meId, new Date(Date.UTC(2025, 8, 1)))).find(
@@ -251,18 +281,18 @@ describe('the balance shown before you ask', () => {
     // Five days past the entitlement, whatever it is configured to be. Built
     // by date arithmetic rather than string padding so an allowance that runs
     // past the end of September still produces a real date.
-    const end = new Date(Date.UTC(2026, 8, 1 + entitlement + 4));
+    const end = new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH, 1 + entitlement + 4));
 
     const request = await requestLeave({
       employeeId: meId,
       type: 'ANNUAL',
-      fromDate: '2026-09-01',
+      fromDate: periodDayIso(1),
       toDate: end.toISOString().slice(0, 10),
       reason: 'ลาพักร้อนยาว',
     });
     await approveLeave({ requestId: request.id, deciderId: actorId });
 
-    const annual = (await leaveBalances(meId, new Date(Date.UTC(2026, 8, 1)))).find(
+    const annual = (await leaveBalances(meId, periodDay(1))).find(
       (b) => b.type === 'ANNUAL',
     )!;
     // The overrun is split into unpaid days at approval, so the balance

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+  LEGAL_MINIMUM_MULTIPLIER,
+  PayrollRuleError,
   basePaySatang,
   buildPayslip,
   hourlyRateSatang,
-  LEGAL_MINIMUM_MULTIPLIER,
   overtimeAmount,
-  PayrollRuleError,
+  segmentedBasePaySatang,
   toBaht,
   toSatang,
 } from '../src/modules/hr/payroll-rules';
@@ -241,5 +242,92 @@ describe('money arithmetic', () => {
     const perLine = Math.round((toSatang(500) / 8) * 1.1 * 1.5);
     expect(slip.overtimeSatang).toBe(perLine * 30);
     expect(Number.isInteger(slip.overtimeSatang)).toBe(true);
+  });
+});
+
+describe('a wage that changed part-way through the period', () => {
+  it('pays a monthly salary in proportion to how long each rate applied', () => {
+    // 18,000 for 14 days, 30,000 for 16 — a raise effective the 15th of a
+    // 30-day month. Paying the whole month at 30,000 was the old behaviour and
+    // overpaid by about 5,600 baht.
+    const satang = segmentedBasePaySatang({
+      periodDays: 30,
+      unpaidLeaveDays: 0,
+      segments: [
+        { wageRate: 18_000, employmentType: 'MONTHLY', calendarDays: 14, daysWorked: 0 },
+        { wageRate: 30_000, employmentType: 'MONTHLY', calendarDays: 16, daysWorked: 0 },
+      ],
+    });
+    expect(toBaht(satang)).toBeCloseTo(18_000 * (14 / 30) + 30_000 * (16 / 30), 2);
+    expect(toBaht(satang)).toBeLessThan(30_000);
+  });
+
+  it('is unchanged for a period that had one rate throughout', () => {
+    // The ordinary case must not move. A single segment covering the period
+    // pays exactly the salary, with no rounding drift introduced.
+    const segmented = segmentedBasePaySatang({
+      periodDays: 30,
+      unpaidLeaveDays: 0,
+      segments: [
+        { wageRate: 18_000, employmentType: 'MONTHLY', calendarDays: 30, daysWorked: 0 },
+      ],
+    });
+    const flat = basePaySatang({
+      basis: { wageRate: 18_000, employmentType: 'MONTHLY' },
+      daysWorked: 0,
+      unpaidLeaveDays: 0,
+    });
+    expect(segmented).toBe(flat);
+    expect(toBaht(segmented)).toBe(18_000);
+  });
+
+  it('pays daily staff each day at the rate that was in force', () => {
+    const satang = segmentedBasePaySatang({
+      periodDays: 30,
+      unpaidLeaveDays: 0,
+      segments: [
+        { wageRate: 500, employmentType: 'DAILY', calendarDays: 14, daysWorked: 12 },
+        { wageRate: 600, employmentType: 'DAILY', calendarDays: 16, daysWorked: 14 },
+      ],
+    });
+    expect(toBaht(satang)).toBe(500 * 12 + 600 * 14);
+  });
+
+  it('deducts unpaid leave at the weighted rate, not the newest one', () => {
+    const withLeave = segmentedBasePaySatang({
+      periodDays: 30,
+      unpaidLeaveDays: 3,
+      segments: [
+        { wageRate: 18_000, employmentType: 'MONTHLY', calendarDays: 15, daysWorked: 0 },
+        { wageRate: 30_000, employmentType: 'MONTHLY', calendarDays: 15, daysWorked: 0 },
+      ],
+    });
+    const withoutLeave = segmentedBasePaySatang({
+      periodDays: 30,
+      unpaidLeaveDays: 0,
+      segments: [
+        { wageRate: 18_000, employmentType: 'MONTHLY', calendarDays: 15, daysWorked: 0 },
+        { wageRate: 30_000, employmentType: 'MONTHLY', calendarDays: 15, daysWorked: 0 },
+      ],
+    });
+    // Weighted salary is 24,000; three days off it at the ม.68 divisor.
+    expect(toBaht(withoutLeave - withLeave)).toBeCloseTo((24_000 / 30) * 3, 1);
+  });
+
+  it('never pays less than nothing', () => {
+    const satang = segmentedBasePaySatang({
+      periodDays: 30,
+      unpaidLeaveDays: 60,
+      segments: [
+        { wageRate: 18_000, employmentType: 'MONTHLY', calendarDays: 30, daysWorked: 0 },
+      ],
+    });
+    expect(satang).toBe(0);
+  });
+
+  it('refuses a period with no wage on record rather than paying zero', () => {
+    expect(() =>
+      segmentedBasePaySatang({ periodDays: 30, unpaidLeaveDays: 0, segments: [] }),
+    ).toThrow(PayrollRuleError);
   });
 });
