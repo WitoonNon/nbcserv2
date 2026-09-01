@@ -18,6 +18,24 @@ const CONFIG: {
   value: unknown;
   description: string;
   isAssumption: boolean;
+  /**
+   * Push `value` over what is already in the database.
+   *
+   * Off by default, and that default is right: the office edits these at
+   * /settings/assumptions, and a reseed that overwrote their work would undo
+   * it silently. But it also means a seeded value that turns out to be WRONG
+   * can never be corrected — the fix lives in the file and the database keeps
+   * the mistake, with a passing build either way.
+   *
+   * That happened here. The scan-point coordinate was corrected in code on
+   * 31 ส.ค. after being measured 4.84 km from the client's address; production
+   * kept the original, so the geofence sat 4.84 km from the office with a
+   * 300 m radius and would have flagged every punch ever made.
+   *
+   * Set it deliberately, in the same commit as the corrected value, and clear
+   * it once the correction has been deployed everywhere.
+   */
+  correctValue?: boolean;
 }[] = [
   // --- Fees ------------------------------------------------------------
   {
@@ -175,51 +193,50 @@ const CONFIG: {
 
   // --- Timeclock: where "at the office" is ------------------------------
   //
-  // Answered by the client on 26 ส.ค. 2569: 74/1 หมู่ 3 ต.ละหาร อ.บางบัวทอง
-  // นนทบุรี 11110, with a printed QR mounted permanently (no screen variant).
+  // The client dropped a pin on the mounting point and sent it on 31 ส.ค. 2569:
+  //   https://maps.google.com/maps?q=13.938398,100.438665
+  // They also settled the address question — 74/1 หมู่ 3 is the office; the
+  // 105/26 หมู่ 2 on the work-order letterhead is where the company was
+  // registered and nobody works there.
   //
-  // The client gave an address, not a coordinate. This value decides whether
-  // a scan counts as being at work, which decides whether somebody is paid,
-  // and it MUST be replaced by standing at the mounting point and reading the
-  // coordinate off a phone.
-  //
-  // ⚠️ The first seeded value — the ต.ละหาร subdistrict centroid, 13.968264 /
-  // 100.404581 — was measured on 31 ส.ค. to be 4.8 km from the addressed
-  // area. Against a 300 m fence that flags EVERY punch, which is worse than
-  // no check at all: a queue that is always full is a queue nobody reads.
-  //
-  // Replaced with the geocoded centre of หมู่ 3 ต.ละหาร (OpenStreetMap has no
-  // house numbers for this area, so this is the village, not the building).
-  // Still a guess — but a guess in the right kilometre — and the radius is
-  // widened to match its honest uncertainty rather than pretending to a
-  // precision it does not have.
+  // This is no longer an assumption, and the history is worth keeping because
+  // both earlier guesses were badly wrong in a way nothing would have caught:
+  // the ต.ละหาร centroid was 4.96 km from this pin, and the หมู่ 3 village
+  // centre that replaced it was still 3.68 km away. Against any sane radius
+  // both would have flagged every punch ever made — and a review queue that is
+  // always full is one nobody reads, so the check would have been switched off
+  // within a week and the clock would have been measuring nothing.
   {
     key: 'office.location.lat',
-    value: 13.9391592,
+    value: 13.938398,
     description:
-      'ละติจูดจุดสแกนเข้างาน — ค่าประมาณระดับหมู่บ้าน (หมู่ 3 ต.ละหาร) ยังไม่ใช่พิกัดจริงของจุดติด QR ต้องไปยืนที่จุดนั้นแล้วอ่านพิกัดจากมือถือมาแทน',
-    isAssumption: true,
+      'ละติจูดจุดสแกนเข้างาน — พิกัดจริงจากหมุดที่ลูกค้าปักให้ 31 ส.ค. 2569 ตรงจุดที่จะติด QR',
+    isAssumption: false,
+    correctValue: true,
   },
   {
     key: 'office.location.lng',
-    value: 100.4379344,
+    value: 100.438665,
     description:
-      'ลองจิจูดจุดสแกนเข้างาน — ค่าประมาณ ต้องแทนด้วยพิกัดจริงเช่นเดียวกับ office.location.lat',
-    isAssumption: true,
+      'ลองจิจูดจุดสแกนเข้างาน — พิกัดจริงจากหมุดที่ลูกค้าปักให้ 31 ส.ค. 2569',
+    isAssumption: false,
+    correctValue: true,
   },
   {
     key: 'office.location.radiusMetres',
-    value: 1500,
+    value: 150,
     description:
-      'รัศมีที่ยอมรับว่าอยู่ที่ออฟฟิศ — ตั้งไว้ 1,500 ม. ชั่วคราวเพราะพิกัดยังเป็นค่าประมาณระดับหมู่บ้าน กว้างขนาดนี้ยังกันการสแกนจากบ้านได้ แต่กันการสแกนจากร้านข้างๆ ไม่ได้ **เมื่อได้พิกัดจริงต้องลดเหลือ 50–100 ม. ทันที** ไม่งั้นการตรวจนี้แทบไม่มีความหมาย',
-    isAssumption: true,
+      'รัศมีที่ยอมรับว่าอยู่ที่จุดสแกน 150 ม. — แคบลงได้เพราะพิกัดเป็นของจริงแล้ว ไม่ใช่ค่าประมาณระดับหมู่บ้าน · GPS ในอาคารคลาดเคลื่อนได้ แต่กรณีนั้นระบบตัดสินเป็น UNRELIABLE ให้หัวหน้าตรวจ ไม่ใช่ปล่อยผ่าน',
+    isAssumption: false,
+    correctValue: true,
   },
   {
     key: 'office.address',
     value: '74/1 หมู่ 3 ต.ละหาร อ.บางบัวทอง จ.นนทบุรี 11110',
     description:
-      'ที่ตั้งจุดสแกนเข้างาน ตามที่ลูกค้าแจ้ง 26 ส.ค. 2569 — ไม่ตรงกับที่อยู่บนหัวใบงาน (105/26 หมู่ 2) ซึ่งเป็นที่อยู่จดทะเบียน ยังไม่ได้ยืนยันว่าอันไหนคือจุดสแกนจริง',
-    isAssumption: true,
+      'ที่ตั้งออฟฟิศจริงและจุดสแกนเข้างาน ลูกค้ายืนยัน 31 ส.ค. 2569 — ส่วน 105/26 หมู่ 2 บนหัวใบงานคือที่อยู่จดทะเบียนบริษัท ไม่มีคนทำงานที่นั่น',
+    isAssumption: false,
+    correctValue: true,
   },
 
   // --- Leave policy -----------------------------------------------------
@@ -280,7 +297,12 @@ export async function seedPlatform() {
     await prisma.appConfig.upsert({
       where: { key: c.key },
       create: { key: c.key, value: c.value as never, description: c.description, isAssumption: c.isAssumption },
-      update: { description: c.description, isAssumption: c.isAssumption },
+      update: {
+        description: c.description,
+        isAssumption: c.isAssumption,
+        // Only when the entry asks for it — see `correctValue`.
+        ...(c.correctValue ? { value: c.value as never } : {}),
+      },
     });
   }
 
