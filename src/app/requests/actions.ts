@@ -8,6 +8,7 @@ import {
   requestOvertime,
 } from '@/modules/hr/overtime.service';
 import { cancelLeave, LeaveError, requestLeave } from '@/modules/hr/leave.service';
+import { SELECTABLE_OVERTIME_KINDS } from '@/modules/hr/payroll-rules';
 import { currentEmployee } from '@/modules/hr/self-service';
 
 /**
@@ -54,7 +55,11 @@ async function actingEmployee() {
   return employee;
 }
 
-const OVERTIME_KINDS: OvertimeKind[] = ['WORKDAY_OT', 'HOLIDAY_WORK', 'HOLIDAY_OT'];
+// Mirrors the form. Kept in step with SELECTABLE_OVERTIME_KINDS rather than
+// listing the enum, because a select element is a suggestion — the value that
+// arrives here comes from the network, not from the dropdown.
+const OVERTIME_KINDS: OvertimeKind[] = SELECTABLE_OVERTIME_KINDS;
+
 const LEAVE_TYPES: LeaveType[] = ['SICK', 'PERSONAL', 'ANNUAL', 'UNPAID'];
 
 export async function submitOvertimeAction(

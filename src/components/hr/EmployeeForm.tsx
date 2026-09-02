@@ -149,10 +149,10 @@ export function EmployeeForm({
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <F
-              label="เลขบัตรประชาชน"
+              label="เลขประจำตัว 13 หลัก"
               name="nationalId"
               placeholder={employee?.nationalIdMasked ?? '13 หลัก'}
-              hint="ระบบตรวจเลขหลักสุดท้ายให้ ถ้าพิมพ์ผิดจะไม่ให้บันทึก"
+              hint="บัตรประชาชน หรือเลขประจำตัวคนต่างด้าวจากใบอนุญาตทำงาน"
             />
             <F
               label="เลขบัญชีธนาคาร"

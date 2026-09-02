@@ -7,7 +7,7 @@ import {
   decryptOptional,
   digitsOnly,
   last4,
-  isValidThaiNationalId,
+  isValidIdNumber,
 } from '@/lib/crypto/field';
 
 /**
@@ -334,10 +334,13 @@ function validate(input: EmployeeInput): void {
   if (!input.position.trim()) throw new EmployeeError('กรุณากรอกตำแหน่ง');
 
   const nid = input.nationalId?.trim();
-  if (nid && !isValidThaiNationalId(nid)) {
+  if (nid && !isValidIdNumber(nid)) {
     // Checked here rather than left to the payroll run: once encrypted, a
     // wrong digit cannot be spotted by looking at it.
-    throw new EmployeeError('เลขบัตรประชาชนไม่ถูกต้อง — ตรวจสอบอีกครั้ง');
+    //
+    // isValidIdNumber, not isValidThaiNationalId: the check digit only holds
+    // for citizen prefixes, and this register has migrant workers in it.
+    throw new EmployeeError('เลขประจำตัวไม่ถูกต้อง — ต้องเป็นตัวเลข 13 หลักตามบัตรประชาชนหรือใบอนุญาตทำงาน');
   }
 
   if (input.wageRate !== null && input.wageRate !== undefined) {

@@ -1,7 +1,7 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
 import { env } from '@/lib/env';
-import type { TimeClockKind } from '@/generated/prisma';
+import type { EmployeeStatus, TimeClockKind } from '@/generated/prisma';
 import { checkGeofence, type Coordinates } from './geofence';
 import { verifyToken } from './timeclock-token';
 import { bangkokDay, dailyRows, summariseAttendance, type AttendanceSummary, type Punch } from './worktime';
@@ -135,6 +135,32 @@ export interface PunchResult {
 }
 
 /**
+ * Who may punch.
+ *
+ * This was `status !== 'ACTIVE'`, which read as "must be employed" but means
+ * "must be past probation" — the enum uses ACTIVE for permanent staff, not for
+ * employed-at-all. So a new hire could be entered, given a login and a wage,
+ * and then refused at the clock with a message that pointed at nothing they
+ * could fix. The client hit it on their first real employee.
+ *
+ * Probation staff work the same hours and are paid for them, so they clock the
+ * same way. What the guard is actually for is people who should not be
+ * accruing time: resigned, or away on long leave.
+ *
+ * Note that overtime and leave never had this bug — `requests/actions.ts`
+ * gates on the `isActive` flag instead, which probation passes. The two paths
+ * disagreeing is what made the symptom so confusing: the same employee could
+ * file for overtime but not clock in.
+ */
+const CAN_CLOCK: EmployeeStatus[] = ['ACTIVE', 'PROBATION'];
+
+/** Said to the person standing at the QR code, so each names its own way out. */
+const STATUS_REFUSAL_TH: Partial<Record<EmployeeStatus, string>> = {
+  RESIGNED: 'พนักงานคนนี้ลาออกแล้ว — ถ้ากลับเข้าทำงาน ให้ฝ่ายบุคคลเปลี่ยนสถานะก่อน',
+  ON_LEAVE: 'พนักงานคนนี้อยู่ระหว่างลาระยะยาว — ถ้ากลับมาทำงานแล้ว ให้ฝ่ายบุคคลเปลี่ยนสถานะก่อน',
+};
+
+/**
  * Record a punch.
  *
  * Whether it is IN or OUT is worked out from the person's own last entry
@@ -156,8 +182,8 @@ export async function punchClock(input: PunchInput): Promise<PunchResult> {
     select: { id: true, status: true },
   });
   if (!employee) throw new TimeClockError('ไม่พบข้อมูลพนักงาน', 404);
-  if (employee.status !== 'ACTIVE') {
-    throw new TimeClockError('บัญชีพนักงานนี้ไม่ได้อยู่ในสถานะทำงาน', 409);
+  if (!CAN_CLOCK.includes(employee.status)) {
+    throw new TimeClockError(STATUS_REFUSAL_TH[employee.status] ?? 'บัญชีพนักงานนี้ไม่ได้อยู่ในสถานะทำงาน', 409);
   }
 
   const last = await prisma.timeClockEntry.findFirst({

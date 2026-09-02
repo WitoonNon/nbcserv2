@@ -264,6 +264,68 @@ describe('what does get refused', () => {
       status: 409,
     });
   });
+
+  it('says which status is in the way, and how to clear it', async () => {
+    // The old message named no status and offered no way out, so the office
+    // went looking through settings for a switch that did not exist.
+    await prisma.employee.update({ where: { id: employeeId }, data: { status: 'RESIGNED' } });
+
+    await expect(punchClock({ employeeId, token, at: OFFICE })).rejects.toThrow(/ลาออกแล้ว/);
+  });
+
+  it('refuses someone away on long leave', async () => {
+    await prisma.employee.update({ where: { id: employeeId }, data: { status: 'ON_LEAVE' } });
+
+    await expect(punchClock({ employeeId, token, at: OFFICE })).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+});
+
+describe('probation staff', () => {
+  /*
+   * The client's first employee was on probation and could not clock in. The
+   * guard read `status !== 'ACTIVE'`, which sounds like "must be employed" but
+   * means "must be permanent" — ACTIVE is the enum value for permanent staff.
+   *
+   * Probation staff work the hours and are paid for them, so they punch like
+   * everybody else. Both directions are covered here: that they can, and that
+   * the punch is a real row payroll will read, not a swallowed no-op.
+   */
+  it('can punch in', async () => {
+    await prisma.employee.update({ where: { id: employeeId }, data: { status: 'PROBATION' } });
+
+    const result = await punchClock({ employeeId, token, at: OFFICE, accuracyMetres: 10 });
+
+    expect(result.kind).toBe('IN');
+    expect(result.needsReview).toBe(false);
+  });
+
+  it('records the punch, not just a passing return value', async () => {
+    await prisma.employee.update({ where: { id: employeeId }, data: { status: 'PROBATION' } });
+    const before = await prisma.timeClockEntry.count({ where: { employeeId } });
+
+    await punchClock({ employeeId, token, at: OFFICE, accuracyMetres: 10 });
+
+    expect(await prisma.timeClockEntry.count({ where: { employeeId } })).toBe(before + 1);
+  });
+
+  it('pairs IN and OUT the same way permanent staff do', async () => {
+    await prisma.employee.update({ where: { id: employeeId }, data: { status: 'PROBATION' } });
+    const now = new Date();
+
+    const first = await punchClock({ employeeId, token, at: OFFICE, accuracyMetres: 10, now });
+    const second = await punchClock({
+      employeeId,
+      token,
+      at: OFFICE,
+      accuracyMetres: 10,
+      now: new Date(now.getTime() + 5 * 3_600_000),
+    });
+
+    expect(first.kind).toBe('IN');
+    expect(second.kind).toBe('OUT');
+  });
 });
 
 describe('the same scan arriving twice', () => {

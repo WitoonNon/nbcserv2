@@ -15,7 +15,11 @@ import {
   splitLeave,
   type LeavePolicy,
 } from '@/modules/hr/leave-rules';
-import { LEGAL_MINIMUM_MULTIPLIER, OVERTIME_LABEL_TH } from '@/modules/hr/payroll-rules';
+import {
+  LEGAL_MINIMUM_MULTIPLIER,
+  OVERTIME_LABEL_TH,
+  SELECTABLE_OVERTIME_KINDS,
+} from '@/modules/hr/payroll-rules';
 
 /**
  * The employee's side of overtime and leave.
@@ -91,7 +95,7 @@ export function OvertimeRequestForm({ today }: { today: string }) {
           onChange={(e) => setKind(e.target.value as OvertimeKind)}
           className={FIELD}
         >
-          {(Object.keys(OVERTIME_LABEL_TH) as OvertimeKind[]).map((k) => (
+          {SELECTABLE_OVERTIME_KINDS.map((k) => (
             <option key={k} value={k}>
               {OVERTIME_LABEL_TH[k]}
             </option>

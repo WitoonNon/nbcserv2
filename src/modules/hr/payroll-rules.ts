@@ -60,6 +60,22 @@ export const OVERTIME_LABEL_TH: Record<OvertimeKind, string> = {
   HOLIDAY_OT: 'โอทีวันหยุด (3 เท่า)',
 };
 
+/**
+ * What an employee may pick on the request form.
+ *
+ * The client asked for holiday overtime to be taken off the list on
+ * 2 ก.ย. 2569 — they do not run it, and an option nobody should choose is an
+ * option somebody eventually chooses by mistake.
+ *
+ * It is removed from the form, not from the system. HOLIDAY_OT stays in the
+ * enum, in LEGAL_MINIMUM_MULTIPLIER and in the calculator, because dropping a
+ * value that approved rows may point at turns their history into an error —
+ * and because ม.63 does not stop applying just because the form stopped
+ * offering it. If the client ever works a holiday past normal hours, the rate
+ * is still here and correct.
+ */
+export const SELECTABLE_OVERTIME_KINDS: OvertimeKind[] = ['WORKDAY_OT', 'HOLIDAY_WORK'];
+
 export class PayrollRuleError extends Error {}
 
 /** Baht as an integer number of satang. */

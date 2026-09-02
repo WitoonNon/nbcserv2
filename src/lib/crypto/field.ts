@@ -124,3 +124,36 @@ export function isValidThaiNationalId(v: string): boolean {
   for (let i = 0; i < 12; i++) sum += Number(d[i]) * (13 - i);
   return (11 - (sum % 11)) % 10 === Number(d[12]);
 }
+
+/**
+ * The first digit says which population the number was issued to. 1–5 are the
+ * categories for Thai citizens; 6, 7 and 8 are issued to non-citizens.
+ */
+function isCitizenPrefix(d: string): boolean {
+  return d[0] !== undefined && d[0] >= '1' && d[0] <= '5';
+}
+
+/**
+ * The identity number as the register actually has to accept it.
+ *
+ * The check digit above is the right test for a Thai citizen's card and the
+ * wrong test for everyone else. The client employs migrant workers and typed
+ * the 13-digit number straight off a work permit; it failed, and the system
+ * told the owner of a government document that the government's number was
+ * invalid. That is the system being wrong, and no setting could have fixed it.
+ *
+ * So the check digit is applied only to citizen prefixes, where it is known to
+ * hold and where nearly every record will fall. For 6/7/8 the length is all
+ * that is checked — the schemes behind those numbers are not ones this code
+ * can verify, and refusing what it cannot verify is worse than accepting it.
+ *
+ * The cost is real and worth stating: a mistyped digit in a foreign worker's
+ * number will be stored. Length still catches the common slip (a dropped or
+ * doubled digit), and `nationalIdLast4` stays readable for checking against
+ * the document later.
+ */
+export function isValidIdNumber(v: string): boolean {
+  const d = digitsOnly(v);
+  if (d.length !== 13) return false;
+  return isCitizenPrefix(d) ? isValidThaiNationalId(d) : true;
+}

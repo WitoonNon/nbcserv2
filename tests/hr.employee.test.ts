@@ -17,6 +17,7 @@ import { createLoginForEmployee } from '../src/modules/hr/employee-login.service
 import {
   encryptField,
   decryptField,
+  isValidIdNumber,
   isValidThaiNationalId,
   last4,
   FieldCryptoError,
@@ -146,6 +147,51 @@ describe('field encryption', () => {
     expect(isValidThaiNationalId(NID)).toBe(true);
     expect(isValidThaiNationalId('1101700207361')).toBe(false); // check digit should be 6
     expect(isValidThaiNationalId('123')).toBe(false);
+  });
+
+  describe('the number the register actually accepts', () => {
+    /*
+     * The client employs migrant workers and entered the 13-digit number from
+     * a work permit. It failed the citizen check digit, so the system told the
+     * holder of a government document that the government's number was wrong.
+     *
+     * The check digit is kept where it is known to hold — prefixes 1-5, which
+     * is nearly every record — and skipped for 6/7/8, whose issuing schemes
+     * this code cannot verify.
+     */
+    it('still applies the check digit to a citizen number', () => {
+      expect(isValidIdNumber(NID)).toBe(true);
+      expect(isValidIdNumber('1101700207361')).toBe(false);
+    });
+
+    it('accepts a foreign worker number that fails the citizen check digit', () => {
+      // Prefix 6, and deliberately a number whose check digit does not agree —
+      // that disagreement is the whole point of the case.
+      const foreign = '6681200021663';
+      expect(isValidThaiNationalId(foreign)).toBe(false);
+      expect(isValidIdNumber(foreign)).toBe(true);
+    });
+
+    it('accepts the other non-citizen prefixes', () => {
+      expect(isValidIdNumber('7681200021663')).toBe(true);
+      expect(isValidIdNumber('8681200021663')).toBe(true);
+    });
+
+    it('still holds the line on length, whatever the prefix', () => {
+      // The one check that survives for foreign numbers, so it has to work:
+      // a dropped or doubled digit is the common slip.
+      expect(isValidIdNumber('668120002166')).toBe(false);
+      expect(isValidIdNumber('66812000216633')).toBe(false);
+      expect(isValidIdNumber('')).toBe(false);
+    });
+
+    it('does not treat a 0 or 9 prefix as a licence to skip the check', () => {
+      // Neither is issued to anyone; they must not fall through the citizen
+      // branch by accident, but they are also not a case worth inventing
+      // rules for — length is what stops them being nonsense.
+      expect(isValidIdNumber('0101700207364')).toBe(true);
+      expect(isValidIdNumber('010170020736')).toBe(false);
+    });
   });
 
   it('takes the last four digits ignoring punctuation', () => {

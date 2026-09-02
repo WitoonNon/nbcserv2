@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   LEGAL_MINIMUM_MULTIPLIER,
+  OVERTIME_LABEL_TH,
+  SELECTABLE_OVERTIME_KINDS,
   PayrollRuleError,
   basePaySatang,
   buildPayslip,
@@ -329,5 +331,30 @@ describe('a wage that changed part-way through the period', () => {
     expect(() =>
       segmentedBasePaySatang({ periodDays: 30, unpaidLeaveDays: 0, segments: [] }),
     ).toThrow(PayrollRuleError);
+  });
+});
+
+describe('which overtime kinds the form offers', () => {
+  /*
+   * The client asked on 2 ก.ย. 2569 to take holiday overtime off the list.
+   * These tests hold the two halves of that apart, because they are easy to
+   * conflate and only one of them was asked for.
+   */
+  it('offers workday and holiday work, not holiday overtime', () => {
+    expect(SELECTABLE_OVERTIME_KINDS).toEqual(['WORKDAY_OT', 'HOLIDAY_WORK']);
+  });
+
+  it('keeps holiday overtime priced, even though nobody can pick it', () => {
+    // Removing the rate along with the option would silently reprice any
+    // approved row that already points at it, and ม.63 has not gone away.
+    expect(LEGAL_MINIMUM_MULTIPLIER.HOLIDAY_OT).toBe(3);
+    expect(OVERTIME_LABEL_TH.HOLIDAY_OT).toContain('3 เท่า');
+  });
+
+  it('still prices every kind it offers', () => {
+    for (const kind of SELECTABLE_OVERTIME_KINDS) {
+      expect(LEGAL_MINIMUM_MULTIPLIER[kind]).toBeGreaterThanOrEqual(1);
+      expect(OVERTIME_LABEL_TH[kind]).toBeTruthy();
+    }
   });
 });
