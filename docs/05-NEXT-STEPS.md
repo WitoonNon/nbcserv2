@@ -38,7 +38,8 @@ npm test                  # ต้องได้ 141/141
 npm run dev
 ```
 
-**บัญชีเดโม:** `tech-001@nbcgroup.co.th` (ช่าง) · `admin@nbcgroup.co.th` (แอดมิน) · รหัส `nbc-dev-1234`
+**บัญชีเดโม:** `tech-001@nbcgroup.co.th` (ช่าง) · รหัส `nbc-dev-1234`
+`admin@nbcgroup.co.th` เปลี่ยนเป็นรหัสจริงของลูกค้าแล้ว (3 ก.ย. 2569) ขอจากเจ้าของโปรเจกต์
 
 > `db:seed` ล้มด้วย *Connection terminated unexpectedly* ตอนขั้น quota → **รันซ้ำ**
 > seed เป็น upsert ทั้งหมด · การ materialise โควตายิง 364 ครั้งเรียงตัวข้าม pooler ไปสิงคโปร์
