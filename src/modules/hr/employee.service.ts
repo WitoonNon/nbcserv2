@@ -104,7 +104,21 @@ export async function listEmployees(filter: EmployeeFilter = {}): Promise<Page<E
 
   const rows = await prisma.employee.findMany({
     where,
-    orderBy: [{ status: 'asc' }, { employeeCode: 'asc' }],
+    /*
+     * By code, and by nothing before it.
+     *
+     * This used to sort by status first, which grouped probation staff above
+     * permanent ones. The intent was to float the people you act on to the
+     * top; the effect, once the client had entered a real register, was a
+     * list that looked shuffled — A05 above A01 — because the grouping is
+     * invisible on screen. A register is looked up, not browsed, and the code
+     * is what someone reads off a timesheet.
+     *
+     * Nothing is lost by dropping the status grouping: resigned staff are
+     * already excluded by the isActive filter above unless they are asked
+     * for, and status has its own column and its own filter.
+     */
+    orderBy: [{ employeeCode: 'asc' }],
     skip: (page - 1) * perPage,
     take: perPage,
     select: {
@@ -326,8 +340,39 @@ function dateOrNull(v: string | null | undefined): Date | null {
   return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
 }
 
+/**
+ * The employee code as it was meant to be typed.
+ *
+ * The client entered their register with a Thai keyboard active and seven
+ * codes came out carrying a leading ◌ฺ (U+0E3A, phinthu) — one of them twice.
+ * It is a combining mark: a dot under the previous letter, and with no
+ * previous letter it renders as almost nothing. On screen "ฺB01" and "B01"
+ * are the same three characters.
+ *
+ * They are not the same string, and that had two consequences nobody could
+ * see. U+0E3A sorts above every Latin letter, so the whole B group fell to
+ * the bottom of a list sorted by code — which is what the client reported.
+ * And searching "B01" matched nothing, because the stored code does not
+ * contain it.
+ *
+ * A combining mark with nothing to combine with is always a typing accident,
+ * so it is dropped. Thai letters in a code are left alone: a mark that
+ * follows a Thai character is doing its job.
+ */
+function normaliseCode(raw: string): string {
+  return raw
+    .normalize('NFC')
+    // Zero-width characters, which arrive from copy-paste and are invisible
+    // in every context including this file.
+    .replace(/[​-‍﻿]/g, '')
+    // Thai combining marks — vowels above/below and tone marks — that have no
+    // Thai letter in front of them.
+    .replace(/(^|[^ก-ฮเ-ไ])[ัิ-ฺ็-๎]+/g, '$1')
+    .trim();
+}
+
 function validate(input: EmployeeInput): void {
-  if (!input.employeeCode.trim()) throw new EmployeeError('กรุณากรอกรหัสพนักงาน');
+  if (!normaliseCode(input.employeeCode)) throw new EmployeeError('กรุณากรอกรหัสพนักงาน');
   if (!input.firstNameTh.trim() || !input.lastNameTh.trim()) {
     throw new EmployeeError('กรุณากรอกชื่อและนามสกุล');
   }
@@ -359,7 +404,7 @@ function toRow(input: EmployeeInput) {
   const acct = input.bankAccount?.trim();
 
   return {
-    employeeCode: input.employeeCode.trim(),
+    employeeCode: normaliseCode(input.employeeCode),
     titleTh: input.titleTh?.trim() || null,
     firstNameTh: input.firstNameTh.trim(),
     lastNameTh: input.lastNameTh.trim(),
@@ -381,7 +426,11 @@ function toRow(input: EmployeeInput) {
         : new Prisma.Decimal(input.wageRate.toFixed(2)),
     hiredAt: dateOrNull(input.hiredAt),
     probationEndAt: dateOrNull(input.probationEndAt),
-    resignedAt: dateOrNull(input.resignedAt),
+    // Cleared unless they are actually resigned. QA caught the date sticking
+    // around after somebody was moved back to probation: harmless on screen,
+    // but a resignation date on a working employee is the kind of stale field
+    // a later report reads and believes.
+    resignedAt: input.status === 'RESIGNED' ? dateOrNull(input.resignedAt) : null,
     bankName: input.bankName?.trim() || null,
     note: input.note?.trim() || null,
     ...(nid
@@ -400,7 +449,7 @@ export async function createEmployee(
   validate(input);
 
   const clash = await prisma.employee.findUnique({
-    where: { employeeCode: input.employeeCode.trim() },
+    where: { employeeCode: normaliseCode(input.employeeCode) },
     select: { id: true },
   });
   if (clash) throw new EmployeeError('รหัสพนักงานนี้มีอยู่แล้ว');
@@ -425,7 +474,7 @@ export async function updateEmployee(
   });
   if (!existing) throw new EmployeeError('ไม่พบพนักงานที่ระบุ');
 
-  const code = input.employeeCode.trim();
+  const code = normaliseCode(input.employeeCode);
   if (code !== existing.employeeCode) {
     const clash = await prisma.employee.findUnique({
       where: { employeeCode: code },

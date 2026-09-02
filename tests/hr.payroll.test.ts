@@ -65,10 +65,22 @@ function periodDayIso(d: number): string {
 }
 /** Last calendar day of the period month. */
 const PERIOD_LAST_DAY = new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH + 1, 0)).getUTCDate();
-/** Buddhist-era period code, e.g. '2569-08'. openPeriod enforces YYYY-MM. */
+/**
+ * A period code no real payroll will ever use.
+ *
+ * This used to be the actual Buddhist year and month, which put the tests and
+ * the company on the same key. openPeriod returns an existing period when the
+ * code matches rather than creating one, so once the client closes a real
+ * period the suite would have picked it up, written test payroll lines into
+ * it, and then deleted it in cleanUp. Nothing had gone wrong yet only because
+ * no period existed.
+ *
+ * 2400 BE is 1857 AD. The format openPeriod enforces is satisfied and the
+ * namespace cannot collide. The dates in PERIOD are still the real ones —
+ * they are what the calculations read; the code is only a label.
+ */
 function periodCode(offsetMonths = 0): string {
-  const d = new Date(Date.UTC(PERIOD_YEAR, PERIOD_MONTH + offsetMonths, 1));
-  return `${d.getUTCFullYear() + 543}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  return `2400-${String(1 + offsetMonths).padStart(2, '0')}`;
 }
 const PERIOD_CODE = periodCode();
 
@@ -109,7 +121,11 @@ async function cleanUp() {
     await prisma.employeeWageChange.deleteMany({ where: { employeeId: { in: ids } } });
     await prisma.employee.deleteMany({ where: { id: { in: ids } } });
   }
-  await prisma.payrollPeriod.deleteMany({ where: { code: { startsWith: '2569-' } } });
+  // NOT '2569-'. That is the current Buddhist year, so the filter matched
+  // every real period the company would ever close this year — a test run
+  // would have deleted the client's payroll along with its own. It had not
+  // fired only because no period existed yet.
+  await prisma.payrollPeriod.deleteMany({ where: { code: { startsWith: '2400-' } } });
 }
 
 beforeAll(async () => {

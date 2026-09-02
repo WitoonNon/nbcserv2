@@ -454,3 +454,120 @@ describe('editing a record that has a login', () => {
     expect(after!.hasLogin).toBe(true);
   });
 });
+
+describe('how the register is ordered', () => {
+  /*
+   * The client asked for this after entering their own staff: the list read as
+   * shuffled because it grouped by status before code, and the grouping is
+   * invisible on screen. Someone reading a code off a timesheet wants that
+   * code where they expect it.
+   */
+  const codes = ['B02', 'A05', 'B01', 'A01'];
+  const made: string[] = [];
+
+
+  beforeAll(async () => {
+    for (const code of codes) {
+      made.push(
+        await createEmployee(
+          {
+            ...base(),
+            employeeCode: `TESTEMP-ORDER-${code}`,
+            lastNameTh: 'เรียงลำดับ',
+            status: code === 'A05' ? 'PROBATION' : 'ACTIVE',
+          },
+          ACTOR,
+        ),
+      );
+    }
+  });
+
+  afterAll(async () => {
+    await prisma.employee.deleteMany({ where: { id: { in: made } } });
+  });
+
+  it('sorts by code, not by status first', async () => {
+    const page = await listEmployees({ q: 'TESTEMP-ORDER-', perPage: 100 });
+    const seen = page.rows.map((r) => r.employeeCode);
+
+    expect(seen).toEqual(['TESTEMP-ORDER-A01', 'TESTEMP-ORDER-A05', 'TESTEMP-ORDER-B01', 'TESTEMP-ORDER-B02']);
+  });
+
+  it('does not float probation staff above a lower code', async () => {
+    // The specific complaint: A05 sat above A01 because it was on probation.
+    const page = await listEmployees({ q: 'TESTEMP-ORDER-', perPage: 100 });
+    const seen = page.rows.map((r) => r.employeeCode);
+
+    expect(seen.indexOf('TESTEMP-ORDER-A01')).toBeLessThan(seen.indexOf('TESTEMP-ORDER-A05'));
+  });
+});
+
+describe('a resignation date that should not linger', () => {
+  it('is cleared when the person is put back to work', async () => {
+    const shape = { ...base(), employeeCode: 'TESTEMP-RETURN-01', lastNameTh: 'กลับเข้าทำงาน' };
+    const id = await createEmployee(
+      { ...shape, status: 'RESIGNED', resignedAt: '2026-01-31' },
+      ACTOR,
+    );
+    expect((await prisma.employee.findUnique({ where: { id } }))?.resignedAt).not.toBeNull();
+
+    // The date is still sitting in the form when the status is changed back —
+    // that is exactly what QA saw, so it is what the test sends.
+    await updateEmployee(id, { ...shape, status: 'PROBATION', resignedAt: '2026-01-31' }, ACTOR);
+
+    expect((await prisma.employee.findUnique({ where: { id } }))?.resignedAt).toBeNull();
+  });
+});
+
+describe('an employee code typed on a Thai keyboard', () => {
+  /*
+   * Seven of the client's codes arrived with a leading ◌ฺ (U+0E3A). It is a
+   * combining mark with nothing to combine with, so it renders as almost
+   * nothing — "ฺB01" and "B01" look identical — but it sorts above every
+   * Latin letter and it breaks an exact search.
+   */
+  const made: string[] = [];
+  afterAll(async () => {
+    await prisma.employee.deleteMany({ where: { id: { in: made } } });
+  });
+
+  it('drops a stray combining mark, however many there are', async () => {
+    made.push(
+      await createEmployee({ ...base(), employeeCode: 'ฺTESTEMP-THAI-1' }, ACTOR),
+      await createEmployee({ ...base(), employeeCode: 'ฺฺTESTEMP-THAI-2' }, ACTOR),
+    );
+
+    const rows = await prisma.employee.findMany({
+      where: { id: { in: made } },
+      select: { employeeCode: true },
+      orderBy: { employeeCode: 'asc' },
+    });
+
+    expect(rows.map((r) => r.employeeCode)).toEqual(['TESTEMP-THAI-1', 'TESTEMP-THAI-2']);
+  });
+
+  it('makes the cleaned code findable by what the user typed', async () => {
+    // The half that matters day to day: before this, searching the code you
+    // believe you entered returned nothing at all.
+    const page = await listEmployees({ q: 'TESTEMP-THAI-1', perPage: 10 });
+    expect(page.rows.map((r) => r.employeeCode)).toContain('TESTEMP-THAI-1');
+  });
+
+  it('leaves a mark that follows a Thai letter alone', async () => {
+    // กฺ is a real cluster. Only an orphaned mark is an accident.
+    const id = await createEmployee({ ...base(), employeeCode: 'TESTEMP-กฺ-9' }, ACTOR);
+    made.push(id);
+
+    const row = await prisma.employee.findUniqueOrThrow({
+      where: { id },
+      select: { employeeCode: true },
+    });
+    expect(row.employeeCode).toBe('TESTEMP-กฺ-9');
+  });
+
+  it('refuses a code that was nothing but a stray mark', async () => {
+    await expect(
+      createEmployee({ ...base(), employeeCode: 'ฺ' }, ACTOR),
+    ).rejects.toBeInstanceOf(EmployeeError);
+  });
+});
