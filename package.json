@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "db:up": "docker compose up -d",
     "db:check": "node scripts/check-db.mjs",
+    "backup": "node scripts/backup.mjs",
+    "backup:verify": "node scripts/backup.mjs --verify",
     "db:generate": "prisma generate",
     "db:format": "prisma format",
     "db:validate": "prisma validate",

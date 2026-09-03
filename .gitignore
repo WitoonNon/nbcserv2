@@ -27,3 +27,6 @@ Thumbs.db
 coverage/
 .vercel
 .env*
+
+# Database backups — real customer and payroll data. Never commit these.
+/backups/

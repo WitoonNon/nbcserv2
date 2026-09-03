@@ -27,6 +27,7 @@ const NAV: { href: string; label: string; en: string; perm: string; icon: NavIco
   { href: '/payroll', label: 'เงินเดือน', en: 'Payroll', perm: 'payroll.read', icon: 'payroll' },
   { href: '/reports', label: 'รายงาน', en: 'Reports', perm: 'report.read', icon: 'reports' },
   { href: '/settings', label: 'ตั้งค่า', en: 'Settings', perm: 'admin.config', icon: 'settings' },
+  { href: '/settings/system', label: 'สถานะระบบ', en: 'System health', perm: 'admin.config', icon: 'settings' },
 ];
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {

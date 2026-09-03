@@ -31,6 +31,11 @@ export const PUBLIC_PREFIXES = [
   // Customers linking their LINE account are not signed in — that is the
   // whole point of the flow.
   '/api/line',
+  // An uptime monitor has no session and must not be given a credential to
+  // store. What it can read is operational only — whether the database
+  // answered, how many days of quota calendar remain — and never a name, a
+  // job, or a count of anything a competitor would want.
+  '/api/health',
 ] as const;
 
 /** Endpoints replayed from the offline queue, which must be able to answer 401. */
