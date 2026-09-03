@@ -21,7 +21,7 @@ import { formatThaiDate } from '@/lib/date/buddhist';
  * could not be sent is a row saying so — not an exception, and not silence.
  */
 
-export type JobNotification = 'JOB_CONFIRMED' | 'TECH_EN_ROUTE' | 'TECH_ON_SITE';
+export type JobNotification = 'JOB_CONFIRMED' | 'TECH_EN_ROUTE' | 'TECH_ON_SITE' | 'PM_DUE';
 
 /** Fill `{{name}}` placeholders from the template body. */
 function render(body: string, vars: Record<string, string>): string {

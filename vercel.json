@@ -8,10 +8,6 @@
     {
       "path": "/api/cron/sweep-holds",
       "schedule": "0 18 * * *"
-    },
-    {
-      "path": "/api/cron/propose-pm",
-      "schedule": "0 19 * * *"
     }
   ],
   "regions": [

@@ -70,6 +70,14 @@ export async function seedForms() {
       bodyTh: 'ช่างถึงหน้างานแล้วครับ\n\nเลขที่งาน {{jobNo}}\n\nหากไม่พบช่าง โทร 02-000-7332 ต่อ 1-3 ได้เลยครับ',
     },
     {
+      // Sent when the OFFICE confirms a proposed PM visit — never when the
+      // system proposes one. A customer told about a date nobody has agreed
+      // to would ring about a visit that may never be booked at all.
+      code: 'PM_DUE',
+      bodyTh:
+        'ถึงรอบล้างแอร์ตามกำหนดแล้วครับ\n\nเลขที่งาน {{jobNo}}\nวันที่นัดหมาย {{scheduledDate}}\n\nหากวันนี้ไม่สะดวก แจ้งเปลี่ยนได้ที่ 02-000-7332 ต่อ 1-3 ครับ\nติดตามสถานะงานได้ที่ {{trackUrl}}',
+    },
+    {
       code: 'QUOTATION_SENT',
       bodyTh: 'NBC Group ส่งใบเสนอราคา {{quotationNo}} ยอด {{grandTotal}} บาท กดดูและอนุมัติได้ที่ {{quoteUrl}}',
     },

@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; en: string; perm: string; icon: NavIco
   { href: '/jobs', label: 'งานทั้งหมด', en: 'Jobs', perm: 'job.read', icon: 'jobs' },
   { href: '/dispatch', label: 'จ่ายงาน', en: 'Dispatch', perm: 'dispatch.read', icon: 'dispatch' },
   { href: '/schedule', label: 'ตารางงาน', en: 'Schedule', perm: 'quota.read', icon: 'schedule' },
+  { href: '/schedule/pm', label: 'ข้อเสนอนัด PM', en: 'PM proposals', perm: 'quota.override', icon: 'schedule' },
   { href: '/customers', label: 'ลูกค้า', en: 'Customers', perm: 'customer.read', icon: 'customers' },
   { href: '/assets', label: 'ทะเบียนเครื่อง', en: 'Assets', perm: 'customer.read', icon: 'assets' },
   { href: '/work-orders', label: 'ใบงาน', en: 'Work orders', perm: 'workorder.read', icon: 'workOrders' },

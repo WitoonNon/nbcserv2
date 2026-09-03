@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db';
 import type { AcType, Prisma } from '@/generated/prisma';
 import { nextDocumentNo } from '@/modules/workorders/sequence.service';
-import { dateOnly, getAvailability } from './quota.service';
+import { bookSlotWithin, dateOnly, getAvailability } from './quota.service';
 import {
   MAX_PM_PROPOSALS_PER_DAY,
   nextPmDueAfter,
@@ -376,4 +376,202 @@ export async function recordPmVisit(jobId: string, completedAt = new Date()): Pr
   await prisma.$transaction(writes);
 
   return assets.length;
+}
+
+// ---------------------------------------------------------------------------
+// Confirming and dismissing — the half that turns a proposal into a visit
+// ---------------------------------------------------------------------------
+
+/**
+ * A proposal is a DRAFT job the system created and nobody has answered yet.
+ *
+ * All four conditions matter. `createdVia: SYSTEM` is what separates a
+ * proposal from a draft somebody in the office started typing and abandoned,
+ * and a null `quotaDayId` is what proves no capacity is being held.
+ */
+const PROPOSAL_WHERE = {
+  status: 'DRAFT',
+  createdVia: 'SYSTEM',
+  category: 'CLEANING_PM',
+  quotaDayId: null,
+} as const;
+
+export interface PendingProposal {
+  jobId: string;
+  jobNo: string;
+  scheduledDate: Date;
+  customerName: string;
+  siteName: string;
+  zoneName: string | null;
+  units: number;
+  minutes: number;
+  assetCount: number;
+  dueNote: string | null;
+  /** Machines on the visit, so the office can see what it is agreeing to. */
+  assets: { code: string; acType: AcType | null }[];
+}
+
+/** Everything waiting for a yes or a no, soonest first. */
+export async function listPmProposals(limit = 100): Promise<PendingProposal[]> {
+  const jobs = await prisma.job.findMany({
+    where: PROPOSAL_WHERE,
+    orderBy: [{ scheduledDate: 'asc' }, { jobNo: 'asc' }],
+    take: limit,
+    select: {
+      id: true,
+      jobNo: true,
+      scheduledDate: true,
+      unitCount: true,
+      estimatedMinutes: true,
+      internalNotes: true,
+      customer: { select: { displayName: true } },
+      site: { select: { name: true } },
+      zone: { select: { nameTh: true } },
+      assets: {
+        select: {
+          acTypeSnapshot: true,
+          asset: { select: { assetTag: true } },
+        },
+      },
+    },
+  });
+
+  return jobs.map((job) => ({
+    jobId: job.id,
+    jobNo: job.jobNo,
+    scheduledDate: job.scheduledDate ?? new Date(),
+    customerName: job.customer.displayName,
+    siteName: job.site?.name ?? '—',
+    zoneName: job.zone?.nameTh ?? null,
+    units: job.unitCount ?? 0,
+    minutes: job.estimatedMinutes ?? 0,
+    assetCount: job.assets.length,
+    dueNote: job.internalNotes,
+    assets: job.assets.map((link) => ({
+      code: link.asset?.assetTag ?? '—',
+      acType: link.acTypeSnapshot,
+    })),
+  }));
+}
+
+export interface ConfirmResult {
+  jobId: string;
+  jobNo: string;
+  scheduledDate: Date;
+  becameFull: boolean;
+}
+
+/**
+ * Turn a proposal into a real, booked visit.
+ *
+ * The slot is consumed HERE and not when the proposal was made, which is the
+ * whole design — but it means the day may have filled up in between. That is
+ * not an error in the system, it is the correct outcome of a customer having
+ * booked it first, so the quota refusal is allowed to propagate and the
+ * proposal is left as a DRAFT for the office to re-date.
+ *
+ * Booking and the status change share one transaction. A job that flipped to
+ * SUBMITTED without consuming capacity would be a visit nobody has room for;
+ * capacity consumed without the job would be a slot no customer holds.
+ */
+export async function confirmPmProposal(params: {
+  jobId: string;
+  actorId: string;
+}): Promise<ConfirmResult> {
+  const job = await prisma.job.findFirst({
+    where: { id: params.jobId, ...PROPOSAL_WHERE },
+    select: {
+      id: true,
+      jobNo: true,
+      zoneId: true,
+      scheduledDate: true,
+      unitCount: true,
+      estimatedMinutes: true,
+    },
+  });
+  if (!job) {
+    // Covers both "no such job" and "somebody already answered this one" —
+    // two people working the same queue is the ordinary case, not an edge.
+    throw new PmPlanningError('ไม่พบข้อเสนอนี้ หรือมีคนตัดสินไปแล้ว');
+  }
+  if (!job.zoneId || !job.scheduledDate) {
+    throw new PmPlanningError('ข้อเสนอนี้ไม่มีเขตหรือวันที่ ยืนยันไม่ได้');
+  }
+
+  const booked = await prisma.$transaction(
+    async (tx) => {
+      const slot = await bookSlotWithin(tx, {
+        date: job.scheduledDate!,
+        zoneId: job.zoneId!,
+        category: 'CLEANING_PM',
+        units: job.unitCount ?? 0,
+        minutes: job.estimatedMinutes ?? 0,
+      });
+
+      await tx.job.update({
+        where: { id: job.id },
+        data: { status: 'SUBMITTED', quotaDayId: slot.quotaDayId },
+      });
+
+      // The same trail every other status change writes, so a PM visit reads
+      // like any other job in the history rather than appearing fully formed.
+      await tx.jobStatusEvent.create({
+        data: {
+          jobId: job.id,
+          toStatus: 'SUBMITTED',
+          fromStatus: 'DRAFT',
+          actorId: params.actorId,
+          note: 'ยืนยันข้อเสนอนัด PM อัตโนมัติ',
+        },
+      });
+
+      return slot;
+    },
+    { timeout: 15_000 },
+  );
+
+  return {
+    jobId: job.id,
+    jobNo: job.jobNo,
+    scheduledDate: job.scheduledDate,
+    becameFull: booked.becameFull,
+  };
+}
+
+/**
+ * Say no to a proposal.
+ *
+ * Cancelled rather than deleted, and the reason is required: the machine is
+ * still due tomorrow, so the next run would propose the same visit again. The
+ * cancelled job is what tells the office they have already looked at this one.
+ */
+export async function dismissPmProposal(params: {
+  jobId: string;
+  actorId: string;
+  reason: string;
+}): Promise<void> {
+  const reason = params.reason.trim();
+  if (!reason) throw new PmPlanningError('ต้องระบุเหตุผลที่ปัดข้อเสนอนี้');
+
+  const job = await prisma.job.findFirst({
+    where: { id: params.jobId, ...PROPOSAL_WHERE },
+    select: { id: true },
+  });
+  if (!job) throw new PmPlanningError('ไม่พบข้อเสนอนี้ หรือมีคนตัดสินไปแล้ว');
+
+  await prisma.$transaction([
+    prisma.job.update({
+      where: { id: job.id },
+      data: { status: 'CANCELLED', cancelledReason: reason },
+    }),
+    prisma.jobStatusEvent.create({
+      data: {
+        jobId: job.id,
+        toStatus: 'CANCELLED',
+        fromStatus: 'DRAFT',
+        actorId: params.actorId,
+        note: `ปัดข้อเสนอนัด PM — ${reason}`,
+      },
+    }),
+  ]);
 }
