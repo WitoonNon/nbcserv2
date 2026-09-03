@@ -17,6 +17,22 @@ export interface WageFormState {
  * The client's answer was that salary is the owner's alone, and the gate has to
  * sit on this action rather than on the screen — a form posts whatever it likes.
  */
+/**
+ * An overtime multiplier the office may or may not have typed.
+ *
+ * Returns null for an empty box so the service stores null — which reads as
+ * "this person is on the statutory floor", the state almost everybody is in.
+ * Coercing a blank to 0 would write a rate below the law onto the record, and
+ * although overtimeAmount() would raise it at approval, the row itself would
+ * be wrong every time somebody read it.
+ */
+function optionalRate(value: FormDataEntryValue | null): number | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function recordWageAction(
   _prev: WageFormState,
   formData: FormData,
@@ -36,6 +52,12 @@ export async function recordWageAction(
         effectiveFrom: String(formData.get('effectiveFrom') ?? ''),
         wageRate,
         employmentType: (String(formData.get('employmentType') ?? 'DAILY') as EmploymentType),
+        // ใบเสนอราคาข้อ 5 — a personal overtime rate, blank meaning "use the
+        // statutory floor". Blank is NOT zero: an empty box has to leave the
+        // employee on the legal minimum, not on nothing.
+        otWorkdayMultiplier: optionalRate(formData.get('otWorkdayMultiplier')),
+        otHolidayWorkMultiplier: optionalRate(formData.get('otHolidayWorkMultiplier')),
+        otHolidayOtMultiplier: optionalRate(formData.get('otHolidayOtMultiplier')),
         reason: String(formData.get('reason') ?? '') || null,
       },
       { id: user.id, name: user.name },

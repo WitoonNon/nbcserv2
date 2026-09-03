@@ -109,9 +109,61 @@ export function WageHistory({
             </label>
           </div>
 
+          {/* ใบเสนอราคาข้อ 5. Optional on purpose — almost everybody is on the
+              statutory floor, and three boxes that must be filled would make
+              the ordinary case the most work. */}
+          <div className="grid gap-3 sm:grid-cols-3 mt-3">
+            <label className="block">
+              <span className="block text-[12px] text-[var(--color-muted)] mb-1">
+                อัตราโอทีวันทำงาน
+              </span>
+              <input
+                name="otWorkdayMultiplier"
+                type="number"
+                step="0.1"
+                min="1.5"
+                inputMode="decimal"
+                placeholder="ว่าง = 1.5 ตามกฎหมาย"
+                className={input}
+              />
+            </label>
+            <label className="block">
+              <span className="block text-[12px] text-[var(--color-muted)] mb-1">
+                อัตราทำงานวันหยุด
+              </span>
+              <input
+                name="otHolidayWorkMultiplier"
+                type="number"
+                step="0.1"
+                min="2"
+                inputMode="decimal"
+                placeholder="ว่าง = 2 ตามกฎหมาย"
+                className={input}
+              />
+            </label>
+            <label className="block">
+              <span className="block text-[12px] text-[var(--color-muted)] mb-1">
+                อัตราโอทีวันหยุด
+              </span>
+              <input
+                name="otHolidayOtMultiplier"
+                type="number"
+                step="0.1"
+                min="3"
+                inputMode="decimal"
+                placeholder="ว่าง = 3 ตามกฎหมาย"
+                className={input}
+              />
+            </label>
+          </div>
+
           <p className="text-[11px] text-[var(--color-muted)] mt-2">
             ค่าแรงเดิมจะถูกบันทึกไว้อัตโนมัติ · การคำนวณเงินเดือนของงวดที่ผ่านมาจะยังใช้ค่าแรงเดิม
             ไม่ใช่ค่าใหม่นี้
+          </p>
+          <p className="text-[11px] text-[var(--color-muted)] mt-1">
+            อัตราโอทีเป็น<strong>ค่าตั้งต้น</strong>ตอนหัวหน้าอนุมัติ · ตั้งต่ำกว่ากฎหมายไม่ได้
+            ระบบจะดันขึ้นให้เสมอ
           </p>
 
           <button

@@ -213,7 +213,15 @@ export default async function TimesheetPage() {
                   <tr key={entry.id} className="border-t border-[var(--color-line)]">
                     <td className="px-3 py-2 tabular-nums">{time(entry.occurredAt)}</td>
                     <td className="px-3 py-2">
-                      {entry.employee.firstNameTh} {entry.employee.lastNameTh}
+                      {/* The name is the way into the month. "Why are these
+                          hours low" is asked about a person, and this list is
+                          where the office is standing when they ask it. */}
+                      <Link
+                        href={`/timesheet/${entry.employeeId}`}
+                        className="text-[var(--color-brand-blue-600)] underline"
+                      >
+                        {entry.employee.firstNameTh} {entry.employee.lastNameTh}
+                      </Link>
                     </td>
                     <td className="px-3 py-2">{entry.kind === 'IN' ? 'เข้างาน' : 'ออกงาน'}</td>
                     <td className={`px-3 py-2 ${VERDICT_LABEL[entry.geofence]?.cls ?? ''}`}>
