@@ -1,0 +1,575 @@
+<title>ใบเสนอราคาระบบสต๊อกอะไหล่ NBC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@500;600&family=Sarabun:wght@400;600;700&display=swap">
+<style>
+  /* NBC Group brand — taken from the system they already use daily:
+     orange #E4750E, blue #2891BD, navy #132945. Neutrals biased warm so the
+     paper sits with the orange rather than against it. */
+  :root {
+    --ink:        #132945;
+    --ink-soft:   #3C4E68;
+    --muted:      #6F6A62;
+    --accent:     #E4750E;
+    --accent-dim: #B65B08;
+    --blue:       #2891BD;
+    --ground:     #FBFAF7;
+    --surface:    #FFFFFF;
+    --surface-2:  #F5F2EC;
+    --line:       #E4DFD5;
+    --line-firm:  #CFC7B8;
+    --good:       #16794A;
+
+    --f-display: 'Mitr', 'Leelawadee UI', Tahoma, sans-serif;
+    --f-body: 'Sarabun', 'Leelawadee UI', Tahoma, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:        #ECE7DE;
+      --ink-soft:   #B9C2D0;
+      --muted:      #918A7E;
+      --accent:     #F5931F;
+      --accent-dim: #E4750E;
+      --blue:       #58AFD6;
+      --ground:     #10192A;
+      --surface:    #17233A;
+      --surface-2:  #1E2C46;
+      --line:       #2B3A55;
+      --line-firm:  #3D5075;
+      --good:       #4FBF8B;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:        #ECE7DE;
+    --ink-soft:   #B9C2D0;
+    --muted:      #918A7E;
+    --accent:     #F5931F;
+    --accent-dim: #E4750E;
+    --blue:       #58AFD6;
+    --ground:     #10192A;
+    --surface:    #17233A;
+    --surface-2:  #1E2C46;
+    --line:       #2B3A55;
+    --line-firm:  #3D5075;
+    --good:       #4FBF8B;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 15px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 28px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.4; }
+
+  /* ---------- masthead ---------- */
+  .masthead { display: flex; flex-direction: column; gap: 18px; }
+  .eyebrow {
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  h1 { font-size: 27px; }
+  .rule { height: 3px; background: var(--accent); width: 56px; border-radius: 2px; }
+  .meta {
+    display: grid; gap: 4px 28px;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    font-size: 13.5px; color: var(--ink-soft);
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  .meta div { display: flex; gap: 8px; }
+  .meta dt { color: var(--muted); min-width: 74px; }
+  .meta dd { margin: 0; font-weight: 600; color: var(--ink); }
+
+  /* ---------- generic section ---------- */
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 { font-size: 19px; display: flex; align-items: baseline; gap: 12px; }
+  h2 .n {
+    font-size: 12px; font-family: var(--f-body); font-weight: 700;
+    color: var(--accent); letter-spacing: .06em;
+  }
+  p { margin: 0; max-width: 66ch; }
+  .lead { color: var(--ink-soft); }
+
+  /* ---------- what they asked for ---------- */
+  .asked { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--line); }
+  .asked > div {
+    display: grid; grid-template-columns: 1fr; gap: 4px;
+    padding: 14px 0; border-bottom: 1px solid var(--line);
+  }
+  @media (min-width: 620px) { .asked > div { grid-template-columns: 220px 1fr; gap: 24px; } }
+  .asked .q { color: var(--muted); font-size: 13.5px; }
+  .asked .a { font-weight: 600; }
+
+  /* ---------- scope modules ---------- */
+  .modules { display: flex; flex-direction: column; gap: 20px; }
+  .mod {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--blue);
+    border-radius: 3px;
+    padding: 20px 22px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .mod-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .mod h3 { font-size: 16.5px; }
+  .mod .tag {
+    font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; font-family: var(--f-body);
+  }
+  .mod ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+  .mod li::marker { color: var(--blue); }
+  .note {
+    font-size: 13.5px; color: var(--ink-soft);
+    background: var(--surface-2); border-radius: 3px;
+    padding: 10px 14px; border-left: 2px solid var(--line-firm);
+  }
+  .note b { color: var(--ink); }
+
+  /* ---------- price options ---------- */
+  .options { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 720px) { .options { grid-template-columns: repeat(3, 1fr); } }
+  .opt {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 3px; padding: 20px 20px 22px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .opt.pick { border-color: var(--accent); border-width: 2px; padding: 19px 19px 21px; }
+  .opt-top { display: flex; flex-direction: column; gap: 3px; }
+  .opt .letter {
+    font-family: var(--f-display); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); font-weight: 500;
+  }
+  .opt.pick .letter { color: var(--accent); }
+  .opt h3 { font-size: 16px; }
+  .opt .covers { font-size: 13.5px; color: var(--ink-soft); flex: 1; }
+  .price { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--line); padding-top: 13px; }
+  .was {
+    font-size: 13px; color: var(--muted);
+    text-decoration: line-through; text-decoration-thickness: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .now {
+    font-family: var(--f-display); font-size: 26px; font-weight: 600;
+    color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25;
+  }
+  .opt.pick .now { color: var(--accent-dim); }
+  .save { font-size: 12.5px; color: var(--good); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .badge {
+    align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    background: var(--accent); color: #fff; padding: 3px 9px; border-radius: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ---------- itemised table ---------- */
+  .wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+  th {
+    font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; background: var(--surface-2);
+  }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* The one-line explainer under an add-on's name. It has to read as
+     subordinate to the item, not as a second item. */
+  td .sub { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-top: 1px; }
+  tbody tr:last-child td { border-bottom: none; }
+  tfoot td {
+    font-weight: 700; background: var(--surface-2);
+    border-top: 2px solid var(--line-firm); border-bottom: none;
+  }
+
+  /* ---------- exclusions ---------- */
+  .excl { border: 1px solid var(--line-firm); border-radius: 3px; padding: 20px 22px; background: var(--surface); }
+  .excl ul {
+    margin: 12px 0 0; padding: 0; list-style: none;
+    display: grid; gap: 7px 26px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    font-size: 14px; color: var(--ink-soft);
+  }
+  .excl li { display: flex; gap: 9px; align-items: baseline; }
+  .excl li::before { content: "—"; color: var(--muted); flex: none; }
+
+  /* ---------- terms + questions ---------- */
+  .terms { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--line); }
+  .terms > div { display: grid; grid-template-columns: 1fr; gap: 2px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+  @media (min-width: 620px) { .terms > div { grid-template-columns: 190px 1fr; gap: 24px; } }
+  .terms .k { color: var(--muted); font-size: 13.5px; }
+
+  ol.qs { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+  ol.qs li::marker { color: var(--accent); font-weight: 700; }
+  ol.qs .why { display: block; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+
+  footer {
+    border-top: 1px solid var(--line); padding-top: 20px;
+    font-size: 13px; color: var(--muted);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  strong { font-weight: 700; }
+
+  /* ---------- print / PDF ----------
+     A quotation gets printed and filed, so A4 is a real target rather than an
+     afterthought. The palette is pinned to the light tokens: a reader on a dark
+     OS would otherwise print navy paper and burn a cartridge on it. */
+  @media print {
+    :root {
+      --ink: #132945; --ink-soft: #3C4E68; --muted: #6F6A62;
+      --accent: #E4750E; --accent-dim: #B65B08; --blue: #2891BD;
+      --ground: #FFFFFF; --surface: #FFFFFF; --surface-2: #F5F2EC;
+      --line: #DDD7CB; --line-firm: #C4BBA9; --good: #16794A;
+    }
+    @page { size: A4; margin: 15mm 14mm 14mm; }
+    body { background: #fff; font-size: 12.4px; line-height: 1.62; }
+    .sheet { max-width: none; padding: 0; gap: 26px; }
+
+    /* Keep each block whole — a scope module split across a page break is
+       where a reader loses track of which option covers what. */
+    section, .mod, .opt, .excl, .asked > div, .terms > div, ol.qs li {
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+
+    h1 { font-size: 21px; }
+    h2 { font-size: 15.5px; }
+    .mod h3, .opt h3 { font-size: 13.5px; }
+    .now { font-size: 20px; }
+    .options { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .opt { padding: 13px 13px 15px; gap: 9px; }
+    .opt.pick { padding: 12px 12px 14px; }
+    .mod { padding: 14px 16px; gap: 9px; }
+    table { min-width: 0; }
+    th, td { padding: 7px 12px; }
+    .wrap { overflow: visible; }
+
+    /* Browsers drop backgrounds by default; these carry meaning here — the
+       recommended option and the table's total row both read by their fill. */
+    .badge, th, tfoot td, .note, .opt.pick {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    /* The section-06 questions belong with the quotation but not on its own
+       page if it can be helped. */
+    footer { padding-top: 14px; }
+  }
+</style>
+
+<div class="sheet">
+
+  <header class="masthead">
+    <div class="eyebrow">ใบเสนอราคา · QT-2024-053</div>
+    <h1>ระบบสต๊อกอะไหล่ การเบิกจ่าย และทะเบียนเครื่องมือช่าง</h1>
+    <div class="rule"></div>
+    <dl class="meta">
+      <div><dt>เรียน</dt><dd>บริษัท เอ็นบีซี กรุ๊ป จำกัด</dd></div>
+      <div><dt>โดย</dt><dd>ทีมงาน T&amp;N Control</dd></div>
+      <div><dt>วันที่</dt><dd>3 กันยายน 2569</dd></div>
+      <div><dt>ยืนราคา</dt><dd>30 วัน</dd></div>
+    </dl>
+  </header>
+
+  <section>
+    <h2><span class="n">01</span>สิ่งที่ทางบริษัทแจ้งมา</h2>
+    <p class="lead">ขอบเขตด้านล่างสร้างจากคำตอบทั้งสามข้อ ไม่ได้เพิ่มเติมนอกเหนือจากนี้</p>
+    <div class="asked">
+      <div>
+        <div class="q">จำนวนคลังเก็บของ</div>
+        <div class="a">คลังกลางที่ออฟฟิศ และของติดรถช่างแยกตามทีม</div>
+      </div>
+      <div>
+        <div class="q">อะไหล่ที่เบิกไปใช้</div>
+        <div class="a">บันทึกจำนวนและราคาต่อชิ้น — ไม่นำไปคิดเป็นต้นทุนของงาน</div>
+      </div>
+      <div>
+        <div class="q">เครื่องมือช่าง</div>
+        <div class="a">ระบบต้องบอกได้ว่าเครื่องมือชิ้นนั้นอยู่กับใคร</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">02</span>ขอบเขตงาน</h2>
+    <p class="lead">
+      แบ่งเป็นสามส่วนที่ทำงานได้ด้วยตัวเอง ทางบริษัทเลือกทำครบทั้งชุด หรือทยอยทำทีละส่วนก็ได้
+      โดยส่วนที่ 1 เป็นฐานของอีกสองส่วน
+    </p>
+
+    <div class="modules">
+      <div class="mod">
+        <div class="mod-head">
+          <h3>ส่วนที่ 1 · สต๊อกอะไหล่หลายคลัง</h3>
+          <span class="tag">ฐานของทั้งระบบ</span>
+        </div>
+        <ul>
+          <li>ทะเบียนอะไหล่และวัสดุสิ้นเปลือง แยกหมวด พร้อมหน่วยนับ เช่น ชิ้น · ขวด · กิโลกรัม</li>
+          <li>คลังกลางที่ออฟฟิศ และคลังรถของแต่ละทีมช่าง (ปัจจุบันมี 3 ทีม)</li>
+          <li>รับของเข้าคลัง · จ่ายออก · <strong>โอนของระหว่างคลัง</strong> เช่น เติมของจากคลังกลางขึ้นรถ</li>
+          <li>ยอดคงเหลือแยกรายคลัง ดูได้ว่าน้ำยาแอร์เหลือกี่ขวดอยู่บนรถทีมไหน</li>
+          <li>ประวัติการเคลื่อนไหวทุกรายการ ย้อนดูได้ว่าของหายไปตอนไหน</li>
+          <li>ตั้งจุดสั่งซื้อขั้นต่ำรายอะไหล่ และหน้ารายการของที่ใกล้หมด</li>
+          <li>ตรวจนับสต๊อกและบันทึกผลต่างระหว่างยอดจริงกับยอดในระบบ</li>
+          <li><strong>พิมพ์ใบตรวจนับลงกระดาษ A4</strong> ถือไปเดินนับที่คลังและบนรถ แล้วกลับมาคีย์เข้าระบบ</li>
+        </ul>
+        <p class="note">
+          <b>ของติดรถช่างถือเป็นคลังจริง ไม่ใช่ของที่เบิกออกไปแล้ว</b>
+          จึงยังนับยอดคงเหลือได้ตลอด และเป็นเหตุผลที่ส่วนนี้เป็นงานหลักของใบเสนอราคานี้
+        </p>
+        <p class="note">
+          <b>ใบตรวจนับพิมพ์ได้สองแบบ</b> แบบเว้นช่องว่างให้กรอกเอง โดยไม่พิมพ์ยอดในระบบลงไป
+          และแบบแสดงยอดในระบบไว้ด้วย แนะนำแบบแรกครับ เพราะถ้าเห็นตัวเลขอยู่ตรงหน้า
+          คนนับมักเซ็นยืนยันตามที่เห็นแทนที่จะนับจริง ซึ่งทำให้ของที่หายไปไม่ถูกพบ
+        </p>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <h3>ส่วนที่ 2 · การเบิกจ่ายให้ช่าง</h3>
+          <span class="tag">ต้องมีส่วนที่ 1</span>
+        </div>
+        <ul>
+          <li>ช่างยื่นขอเบิกจากมือถือ ระบุอะไหล่และจำนวน</li>
+          <li>หัวหน้าอนุมัติหรือตีกลับ พร้อมเหตุผล</li>
+          <li>อนุมัติแล้วตัดสต๊อกจากคลังต้นทางอัตโนมัติ</li>
+          <li>บันทึกราคาต่อชิ้น ณ วันที่เบิก เก็บไว้เป็นประวัติ</li>
+          <li>รายงานการเบิกแยกตามทีม ตามช่วงเวลา และตามรายการอะไหล่</li>
+        </ul>
+        <p class="note">
+          ใช้สายอนุมัติชุดเดียวกับใบงานที่มีอยู่แล้วในระบบ จึงไม่ต้องสร้างขั้นตอนอนุมัติขึ้นใหม่
+        </p>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <h3>ส่วนที่ 3 · ทะเบียนเครื่องมือช่าง ยืม–คืน</h3>
+          <span class="tag">ทำแยกได้</span>
+        </div>
+        <ul>
+          <li>ทะเบียนเครื่องมือรายชิ้น มีรหัสประจำเครื่องมือ เช่น สว่าน · เกจ์วัดน้ำยา · ปั๊มสุญญากาศ</li>
+          <li><strong>บอกได้ว่าตอนนี้อยู่กับใคร</strong> และรับไปเมื่อไร</li>
+          <li>ส่งต่อระหว่างช่างโดยไม่ต้องคืนเข้าคลังก่อน</li>
+          <li>ประวัติการถือครองย้อนหลังทั้งหมดของเครื่องมือแต่ละชิ้น</li>
+          <li>รายการเครื่องมือที่ค้างเกินกำหนดคืน</li>
+        </ul>
+        <p class="note">
+          <b>ตรรกะคนละแบบกับอะไหล่</b> อะไหล่เบิกแล้วหมดไป แต่เครื่องมือเบิกแล้วต้องกลับมา
+          จึงแยกเป็นอีกส่วนหนึ่ง และเลือกไม่ทำในรอบนี้ได้โดยไม่กระทบสองส่วนแรก
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">03</span>ตัวเลือกและราคา</h2>
+    <p class="lead">ราคาด้านล่างหักส่วนลดลูกค้าประจำเรียบร้อยแล้ว</p>
+
+    <div class="options">
+      <div class="opt pick">
+        <span class="badge">แนะนำ</span>
+        <div class="opt-top">
+          <div class="letter">ตัวเลือก ก</div>
+          <h3>ครบทั้งสามส่วน</h3>
+        </div>
+        <div class="covers">สต๊อกหลายคลัง · การเบิกจ่าย · ทะเบียนเครื่องมือ — ครบทั้งสามข้อที่แจ้งมา รวมแจ้งเตือน LINE และใบตรวจนับพิมพ์กระดาษ</div>
+        <div class="price">
+          <span class="was">12,000 บาท</span>
+          <span class="now">9,500 บาท</span>
+          <span class="save">ประหยัด 2,500 บาท</span>
+        </div>
+      </div>
+
+      <div class="opt">
+        <div class="opt-top">
+          <div class="letter">ตัวเลือก ข</div>
+          <h3>สต๊อกและการเบิกจ่าย</h3>
+        </div>
+        <div class="covers">ส่วนที่ 1 และ 2 — เครื่องมือช่างเก็บไว้ทำรอบถัดไป</div>
+        <div class="price">
+          <span class="was">9,000 บาท</span>
+          <span class="now">7,500 บาท</span>
+          <span class="save">ประหยัด 1,500 บาท</span>
+        </div>
+      </div>
+
+      <div class="opt">
+        <div class="opt-top">
+          <div class="letter">ตัวเลือก ค</div>
+          <h3>เฉพาะสต๊อก</h3>
+        </div>
+        <div class="covers">ส่วนที่ 1 อย่างเดียว — เริ่มจากให้ยอดคงเหลือถูกต้องก่อน</div>
+        <div class="price">
+          <span class="was">6,000 บาท</span>
+          <span class="now">5,000 บาท</span>
+          <span class="save">ประหยัด 1,000 บาท</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>รายการ</th>
+            <th class="num">ราคาปกติ</th>
+            <th class="num">ลูกค้าประจำ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>ส่วนที่ 1 · สต๊อกอะไหล่หลายคลัง</td><td class="num">6,000</td><td class="num">5,000</td></tr>
+          <tr><td>ส่วนที่ 2 · การเบิกจ่ายให้ช่าง</td><td class="num">3,000</td><td class="num">2,500</td></tr>
+          <tr><td>ส่วนที่ 3 · ทะเบียนเครื่องมือ ยืม–คืน</td><td class="num">3,000</td><td class="num">2,000</td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td>รวมทั้งสามส่วน (ตัวเลือก ก)</td><td class="num">12,000</td><td class="num">9,500</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="note" style="max-width:none">
+      <b>รวมให้ในราคานี้แล้ว ไม่คิดเพิ่ม</b> — แจ้งเตือน LINE เมื่อมีคำขอเติมของขึ้นรถรออนุมัติ
+      และการพิมพ์ใบตรวจนับลงกระดาษ A4 สำหรับเดินนับของ ทั้งสองรายการตามที่ทางบริษัทแจ้งเพิ่มเมื่อ 3 ก.ย. 2569
+    </p>
+    <p class="lead" style="font-size:13.5px">
+      ทำทีละส่วนภายหลังได้ โดยคิดตามราคาลูกค้าประจำในตารางนี้ ไม่มีค่าใช้จ่ายเพิ่มจากการแยกทำ
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="n">04</span>ฟังก์ชันเสริม เลือกเพิ่มได้ทุกเมื่อ</h2>
+    <p class="lead">
+      รายการด้านล่างไม่รวมอยู่ในราคาข้างต้น แต่ทำเพิ่มทีหลังได้โดยไม่ต้องรื้อของเดิม
+      เลือกทีละรายการก็ได้ ไม่ต้องเลือกทั้งหมด และไม่ต้องตัดสินใจตอนนี้
+    </p>
+
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ฟังก์ชันเสริมของระบบสต๊อก</th>
+            <th class="num">ราคา</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>แจ้งเตือนของใกล้หมดผ่าน LINE<span class="sub">ส่งเข้าไลน์ของหัวหน้าเมื่อของต่ำกว่าจุดสั่งซื้อ</span></td>
+            <td class="num">1,200</td>
+          </tr>
+          <tr>
+            <td>นำเข้าข้อมูลสต๊อกตั้งต้นจากไฟล์ Excel<span class="sub">ถ้ามีรายการอะไหล่เดิมอยู่แล้ว ไม่ต้องพิมพ์ใหม่</span></td>
+            <td class="num">1,500</td>
+          </tr>
+          <tr>
+            <td>สแกน QR ที่ตัวอะไหล่และเครื่องมือ<span class="sub">พิมพ์สติกเกอร์ติด แล้วสแกนเบิกหรือคืนจากมือถือ</span></td>
+            <td class="num">2,000</td>
+          </tr>
+          <tr>
+            <td>รายงานมูลค่าสต๊อกคงเหลือ<span class="sub">แยกตามคลัง ใช้ราคาถัวเฉลี่ย</span></td>
+            <td class="num">1,800</td>
+          </tr>
+          <tr>
+            <td>คิดต้นทุนอะไหล่เข้าใบงาน<span class="sub">รายงานกำไรต่องาน — รอบนี้ทางบริษัทแจ้งว่ายังไม่ต้องการ</span></td>
+            <td class="num">2,500</td>
+          </tr>
+          <tr>
+            <td>ใบสั่งซื้อ (PO) และทะเบียนผู้ขาย<span class="sub">สั่งของ รับของ และเทียบกับใบสั่งซื้อ</span></td>
+            <td class="num">3,500</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ฟังก์ชันเสริมของระบบที่ใช้อยู่แล้ว</th>
+            <th class="num">ราคา</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>สลิปเงินเดือน PDF<span class="sub">พิมพ์แจกพนักงานได้ · เคยแจ้งไว้เมื่อ 25 ส.ค. 2569</span></td>
+            <td class="num">2,500</td>
+          </tr>
+          <tr>
+            <td>แนบสำเนาเอกสารในทะเบียนพนักงาน<span class="sub">บัตรประชาชน ทะเบียนบ้าน วุฒิการศึกษา · แจ้งไว้เมื่อ 26 ส.ค. 2569</span></td>
+            <td class="num">2,000</td>
+          </tr>
+          <tr>
+            <td>ส่งออกรายงานเป็นไฟล์ Excel<span class="sub">ใช้ได้กับทุกหน้ารายงานในระบบ</span></td>
+            <td class="num">1,200</td>
+          </tr>
+          <tr>
+            <td>เตือนใบอนุญาตทำงานใกล้หมดอายุ<span class="sub">สำหรับพนักงานต่างชาติ · เตือนล่วงหน้า 60 วัน</span></td>
+            <td class="num">1,500</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note" style="max-width:none">
+      <b>เลือกพร้อมกันตั้งแต่ 3 รายการ ลดให้ 10%</b>
+      ราคาในตารางนี้ยืนถึงสิ้นปี 2569 ครับ เลือกเพิ่มเมื่อไรก็ได้ในราคาเดิม
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="n">05</span>ไม่รวมในใบเสนอราคานี้</h2>
+    <div class="excl">
+      <p>สามข้อนี้อยู่นอกขอบเขต และยังไม่ได้ตั้งราคาไว้ เพราะต้องดูรายละเอียดก่อนครับ</p>
+      <ul>
+        <li>เชื่อมกับระบบบัญชีหรือ ERP ภายนอก</li>
+        <li>ภาษีมูลค่าเพิ่มและหลายสกุลเงิน</li>
+        <li>คิดมูลค่าสต๊อกแบบ FIFO ตามมาตรฐานบัญชี</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">06</span>เงื่อนไข</h2>
+    <div class="terms">
+      <div><div class="k">การชำระเงิน</div><div>แบ่งสองงวด มัดจำ 50% เมื่อตกลง และ 50% เมื่อส่งมอบ</div></div>
+      <div><div class="k">ระยะเวลา</div><div>เริ่มหลังงานเฟส 3 ของระบบแจ้งซ่อมส่งมอบเรียบร้อย จะแจ้งกำหนดวันอีกครั้งเมื่อทางบริษัทเลือกตัวเลือกแล้ว</div></div>
+      <div><div class="k">การส่งมอบ</div><div>ขึ้นระบบใช้งานจริงพร้อมสอนใช้งาน และเอกสารประกอบภาษาไทย</div></div>
+      <div><div class="k">การแก้ไขหลังส่งมอบ</div><div>แก้ไขข้อผิดพลาดของระบบไม่มีค่าใช้จ่าย 60 วัน</div></div>
+      <div><div class="k">ข้อมูลที่ต้องใช้</div><div>รายการอะไหล่ที่ใช้จริง หน่วยนับ ราคาต่อชิ้น และรายการเครื่องมือช่างที่มีอยู่</div></div>
+      <div><div class="k">ไม่รวมในราคานี้</div><div>ค่าบริการรายเดือนของระบบเดิม และค่าบริการ SEO ซึ่งคิดแยกตามที่ตกลงไว้เดิม</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">07</span>ขอสอบถามเพิ่มเติมสามข้อ</h2>
+    <p class="lead">
+      ตอบตอนไหนก็ได้ครับ ไม่กระทบราคาด้านบน แต่จะช่วยให้ระบบตรงกับวิธีทำงานจริงมากขึ้น
+    </p>
+    <ol class="qs">
+      <li>
+        ช่างหยิบของจากรถตัวเองหน้างาน ต้องขออนุมัติทุกครั้งไหมครับ หรืออนุมัติเฉพาะตอนเติมของจากคลังกลางขึ้นรถ
+        <span class="why">ถ้าต้องอนุมัติทุกครั้งขณะทำงานหน้างาน ช่างมักเลิกบันทึกภายในเดือนแรก แล้วยอดคงเหลือจะเพี้ยน</span>
+      </li>
+      <li>
+        ต้องการตรวจนับสต๊อกจริงเทียบกับระบบทุกกี่เดือนครับ
+        <span class="why">ระบบเตรียมหน้าตรวจนับไว้ให้แล้ว ทราบรอบที่ใช้จริงจะได้ตั้งค่าเริ่มต้นให้เหมาะสม</span>
+      </li>
+      <li>
+        ราคาต่อชิ้นที่ต้องการบันทึก เป็นราคาทุนหรือราคาขายครับ และถ้าซื้อล็อตใหม่ราคาต่างจากเดิม ให้ยึดราคาไหน
+        <span class="why">มีผลต่อวิธีเก็บข้อมูล จึงอยากเก็บให้ถูกตั้งแต่แรก จะได้ไม่ต้องมาแก้ย้อนหลัง</span>
+      </li>
+    </ol>
+  </section>
+
+  <footer>
+    <div>ใบเสนอราคานี้แยกจากงานระบบแจ้งซ่อมและระบบลงเวลาที่ตกลงไว้ก่อนหน้า</div>
+    <div>ทีมงาน T&amp;N Control · 3 กันยายน 2569</div>
+  </footer>
+
+</div>
