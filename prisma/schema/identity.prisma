@@ -46,6 +46,7 @@ model User {
   quotaOverrides   QuotaOverrideLog[]
   quotationsAppr   Quotation[]        @relation("QuotationApprovedBy")
   attachments      Attachment[]
+  hiddenAttachments Attachment[] @relation("AttachmentHiddenBy")
 
   @@index([isActive])
   @@map("users")

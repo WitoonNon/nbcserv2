@@ -44,7 +44,25 @@ model Attachment {
   /// Why it was added late. Required when addedAfterSubmit is true.
   addedReason      String?
 
+  // --- Hiding (Phase 3.6) --------------------------------------------------
+  //
+  // Hidden, never deleted. On the day a customer disputes the work — "the
+  // technician never cleaned it" — these photographs are the company's
+  // evidence. If a row could be removed outright, the other side can claim
+  // the set was edited after signing and nothing here could prove otherwise.
+  // The risk of keeping a wrong photo falls on the customer who signed; the
+  // risk of losing one falls on the company.
+  //
+  // A hidden attachment is excluded from screens and from new documents, and
+  // its file is deliberately left in storage so a document printed before it
+  // was hidden can still be explained.
+  hiddenAt     DateTime?
+  hiddenById   String?
+  /// Required to hide. "Why is this photo gone" has to have an answer.
+  hiddenReason String?
+
   uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  hiddenBy   User? @relation("AttachmentHiddenBy", fields: [hiddenById], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId, kind])
   @@index([sha256])

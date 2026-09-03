@@ -5,7 +5,8 @@ import { requirePermission, can } from '@/lib/auth/guard';
 import { canViewWorkOrder } from '@/modules/workorders/access';
 import { WorkOrderEditor } from '@/components/forms/WorkOrderEditor';
 import { LateAttachments } from '@/components/forms/LateAttachments';
-import { listLateAttachments } from '@/modules/media/attachment.service';
+import { listHiddenAttachments, listLateAttachments } from '@/modules/media/attachment.service';
+import { HiddenAttachments } from '@/components/forms/HiddenAttachments';
 import { formatThaiDate } from '@/lib/date/buddhist';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,7 @@ export default async function WorkOrderDocumentPage({
   // Never fatal: a work order still has to open when the media table is
   // unreachable, because the form is the part somebody came here to read.
   const lateAttachments = await listLateAttachments(id).catch(() => []);
+  const hidden = await listHiddenAttachments('WorkOrder', id).catch(() => []);
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -113,6 +115,20 @@ export default async function WorkOrderDocumentPage({
           workOrderId={workOrder.id}
           attachments={lateAttachments}
           canAttach={can(user, 'workorder.approve')}
+        />
+      )}
+
+      {can(user, 'workorder.approve') && hidden.length > 0 && (
+        <HiddenAttachments
+          workOrderId={workOrder.id}
+          rows={hidden.map((row) => ({
+            id: row.id,
+            kindLabel: row.kind,
+            hiddenAtLabel: row.hiddenAt.toLocaleString('th-TH'),
+            hiddenReason: row.hiddenReason,
+            hiddenByName: row.hiddenByName,
+            url: row.url,
+          }))}
         />
       )}
 

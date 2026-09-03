@@ -327,7 +327,14 @@ export interface LateAttachmentView {
  */
 export async function listLateAttachments(workOrderId: string): Promise<LateAttachmentView[]> {
   const rows = await prisma.attachment.findMany({
-    where: { entityType: 'WorkOrder', entityId: workOrderId, addedAfterSubmit: true },
+    where: {
+      entityType: 'WorkOrder',
+      entityId: workOrderId,
+      addedAfterSubmit: true,
+      // A hidden photo must not reappear on a document just because it was
+      // also a late one — VISIBLE_ONLY belongs on every read that renders.
+      ...VISIBLE_ONLY,
+    },
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
@@ -347,5 +354,166 @@ export async function listLateAttachments(workOrderId: string): Promise<LateAtta
     reason: r.addedReason ?? '',
     addedByName: r.uploadedBy?.name ?? null,
     addedAt: r.createdAt.toISOString(),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Hiding — Phase 3.6
+// ---------------------------------------------------------------------------
+
+/**
+ * The floor a work order's photographs must not fall through.
+ *
+ * BEFORE and AFTER are what the published form templates require at least one
+ * of. Hiding the last one would turn a work order that passed inspection into
+ * one that retroactively did not, which is a different and worse problem than
+ * the wrong photo being on file.
+ */
+const MIN_VISIBLE: Partial<Record<AttachmentKind, number>> = {
+  BEFORE: 1,
+  AFTER: 1,
+};
+
+/** Everything hidden is excluded everywhere except the audit view. */
+export const VISIBLE_ONLY = { hiddenAt: null } as const;
+
+export interface HideAttachmentParams {
+  attachmentId: string;
+  actor: { id: string; name: string };
+  reason: string;
+}
+
+/**
+ * Hide one attachment.
+ *
+ * Four things happen together or not at all: the row is marked, the reason is
+ * kept, the actor is kept, and an AuditLog entry is written. A photograph that
+ * disappeared with no record of who removed it or why is exactly the situation
+ * that makes the whole set untrustworthy.
+ *
+ * The file itself is left in storage on purpose — see the schema comment. A
+ * document printed last month still shows that image, and somebody has to be
+ * able to explain it.
+ */
+export async function hideAttachment(params: HideAttachmentParams): Promise<void> {
+  const reason = params.reason.trim();
+  if (!reason) throw new MediaError('ต้องระบุเหตุผลที่ซ่อนรูปนี้');
+
+  const attachment = await prisma.attachment.findUnique({
+    where: { id: params.attachmentId },
+    select: { id: true, kind: true, entityType: true, entityId: true, hiddenAt: true },
+  });
+  if (!attachment) throw new MediaError('ไม่พบไฟล์แนบ', 404);
+  if (attachment.hiddenAt) throw new MediaError('รูปนี้ถูกซ่อนไปแล้ว', 409);
+
+  const floor = MIN_VISIBLE[attachment.kind];
+  if (floor !== undefined) {
+    const remaining = await prisma.attachment.count({
+      where: {
+        entityType: attachment.entityType,
+        entityId: attachment.entityId,
+        kind: attachment.kind,
+        ...VISIBLE_ONLY,
+        id: { not: attachment.id },
+      },
+    });
+    if (remaining < floor) {
+      throw new MediaError(
+        `ซ่อนไม่ได้ — ใบงานนี้ต้องมีรูป${attachment.kind === 'BEFORE' ? 'ก่อน' : 'หลัง'}ทำงานอย่างน้อย ${floor} รูป`,
+        409,
+      );
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.attachment.update({
+      where: { id: attachment.id },
+      data: { hiddenAt: new Date(), hiddenById: params.actor.id, hiddenReason: reason },
+    }),
+    prisma.auditLog.create({
+      data: {
+        entityType: 'Attachment',
+        entityId: attachment.id,
+        action: 'attachment.hide',
+        actorId: params.actor.id,
+        after: {
+          by: params.actor.name,
+          kind: attachment.kind,
+          of: `${attachment.entityType}:${attachment.entityId}`,
+          reason,
+        },
+      },
+    }),
+  ]);
+}
+
+/** Put one back. Also audited: unhiding is a change to the evidence too. */
+export async function unhideAttachment(params: {
+  attachmentId: string;
+  actor: { id: string; name: string };
+}): Promise<void> {
+  const attachment = await prisma.attachment.findUnique({
+    where: { id: params.attachmentId },
+    select: { id: true, hiddenAt: true, entityType: true },
+  });
+  if (!attachment) throw new MediaError('ไม่พบไฟล์แนบ', 404);
+  if (!attachment.hiddenAt) throw new MediaError('รูปนี้ไม่ได้ถูกซ่อนอยู่', 409);
+
+  await prisma.$transaction([
+    prisma.attachment.update({
+      where: { id: attachment.id },
+      data: { hiddenAt: null, hiddenById: null, hiddenReason: null },
+    }),
+    prisma.auditLog.create({
+      data: {
+        entityType: 'Attachment',
+        entityId: attachment.id,
+        action: 'attachment.unhide',
+        actorId: params.actor.id,
+        after: { by: params.actor.name, of: attachment.entityType },
+      },
+    }),
+  ]);
+}
+
+export interface HiddenAttachmentView {
+  id: string;
+  kind: AttachmentKind;
+  hiddenAt: Date;
+  hiddenReason: string | null;
+  hiddenByName: string | null;
+  url: string;
+}
+
+/**
+ * What was hidden on one entity, for the office's own audit view.
+ *
+ * Kept reachable rather than gone: somebody holding a printed document with a
+ * photograph on it must be able to find out what happened to it.
+ */
+export async function listHiddenAttachments(
+  entityType: string,
+  entityId: string,
+): Promise<HiddenAttachmentView[]> {
+  const rows = await prisma.attachment.findMany({
+    where: { entityType, entityId, hiddenAt: { not: null } },
+    orderBy: { hiddenAt: 'desc' },
+    select: {
+      id: true,
+      kind: true,
+      hiddenAt: true,
+      hiddenReason: true,
+      storageKey: true,
+      hiddenBy: { select: { name: true } },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    hiddenAt: row.hiddenAt!,
+    hiddenReason: row.hiddenReason,
+    hiddenByName: row.hiddenBy?.name ?? null,
+    url: mediaUrl(row.storageKey),
   }));
 }
