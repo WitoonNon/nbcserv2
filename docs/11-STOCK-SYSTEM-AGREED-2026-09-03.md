@@ -1,9 +1,13 @@
 # ระบบสต๊อก — ตกลงแล้ว 3 ก.ย. 2569
 
 > สรุปสำหรับออกใบเสนอราคาและสำหรับทีมที่จะมาทำต่อ
-> อ้างอิง [`NBC-QT-2024-053-Stock-System-TH.pdf`](NBC-QT-2024-053-Stock-System-TH.pdf)
-> ต้นฉบับแก้ราคาได้ที่ [`NBC-QT-2024-053-Stock-System-TH.html`](NBC-QT-2024-053-Stock-System-TH.html)
-> แล้วสั่ง `node scripts/html-to-pdf.mjs docs/NBC-QT-2024-053-Stock-System-TH.html`
+> **ใบเสนอราคาฉบับจริงที่ส่งลูกค้า** — [`NBC-QT-2024-053-Quotation-Form-TH.pdf`](NBC-QT-2024-053-Quotation-Form-TH.pdf)
+> เป็นแบบฟอร์มของบริษัท ต่อเลขจาก QT-2024-052 · แก้ที่ไฟล์ `.html` ชื่อเดียวกัน
+>
+> [`NBC-STOCK-SCOPE-REFERENCE-TH.pdf`](NBC-STOCK-SCOPE-REFERENCE-TH.pdf) เป็น**เอกสารอ้างอิงภายใน ห้ามส่งลูกค้า**
+> เก็บไว้เพราะมีราคาแยกรายส่วนและเมนูฟังก์ชันเสริมที่ใบจริงไม่มี · ถ้าตัวเลขขัดกัน ให้ยึดใบจริง
+>
+> แก้ไฟล์ `.html` แล้วสั่ง `node scripts/html-to-pdf.mjs docs/<ชื่อไฟล์>.html`
 
 ## ราคาที่ตกลง
 

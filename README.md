@@ -435,7 +435,8 @@ npm test
 | `docs/08-SESSION-STATE-2026-08-31.md` · `09-OPEN-DECISIONS` · `10-EMPLOYEE-SYSTEM-GAPS` | สถานะโค้ด · การตัดสินใจที่ค้าง · ช่องว่างระบบพนักงาน |
 | **`docs/11-STOCK-SYSTEM-AGREED-2026-09-03.md`** | **ระบบสต๊อก — ขอบเขตที่ตกลงแล้ว ราคา และคำตอบของลูกค้าทั้งสามข้อ** |
 | `docs/NBC-REQ-001-Client-Data-Checklist-TH.pdf` | แบบสอบถามข้อมูล ฉบับ PDF สำหรับส่งลูกค้า |
-| `docs/NBC-QT-2024-053-Stock-System-TH.pdf` · `.html` | ใบเสนอราคาระบบสต๊อก — แก้ราคาที่ไฟล์ .html แล้วสั่ง `node scripts/html-to-pdf.mjs` |
+| **`docs/NBC-QT-2024-053-Quotation-Form-TH.pdf`** · `.html` | **ใบเสนอราคาระบบสต๊อกฉบับจริง** ตามแบบฟอร์มบริษัท — ฉบับที่ส่งลูกค้า |
+| `docs/NBC-STOCK-SCOPE-REFERENCE-TH.pdf` · `.html` | เอกสารอ้างอิงภายใน **ห้ามส่งลูกค้า** — ราคาแยกรายส่วนและเมนูฟังก์ชันเสริม |
 
 ---
 
