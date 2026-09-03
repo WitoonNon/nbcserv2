@@ -56,9 +56,28 @@ export default async function AssetDetailPage({
 
   return (
     <div className="space-y-4 max-w-5xl">
-      <Link href="/assets" className="text-sm text-[var(--color-brand-blue-600)]">
-        ← กลับไปทะเบียนเครื่อง
-      </Link>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Link href="/assets" className="text-sm text-[var(--color-brand-blue-600)]">
+          ← กลับไปทะเบียนเครื่อง
+        </Link>
+        {/* Two links, because tagging happens both ways: one machine that was
+            replaced, or a whole plant room in an afternoon. */}
+        <span className="text-sm">
+          <Link
+            href={`/print/asset-qr?ids=${asset.id}`}
+            className="text-[var(--color-brand-blue-600)] underline"
+          >
+            พิมพ์ป้าย QR
+          </Link>
+          <span className="text-[var(--color-muted)]"> · </span>
+          <Link
+            href={`/print/asset-qr?site=${asset.siteId}`}
+            className="text-[var(--color-brand-blue-600)] underline"
+          >
+            ทั้งหน้างาน
+          </Link>
+        </span>
+      </div>
 
       <div className="card p-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
